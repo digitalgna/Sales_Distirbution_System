@@ -14,7 +14,7 @@ const Role = sequelize.define("Role", {
   },
   permissionId: {
     type: DataTypes.INTEGER,
-    allowNull: true, // ✅ must allow NULL if onDelete: "SET NULL"
+    allowNull: false, 
     references: {
       model: "Permissions",
       key: "id",
