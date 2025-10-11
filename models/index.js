@@ -55,6 +55,7 @@ Car.hasMany(CarOperation, {
   onDelete: "CASCADE",
 });
 
+
 // Each operation belongs to a car
 CarOperation.belongsTo(Car, {
   foreignKey: "carId",
