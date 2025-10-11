@@ -1,15 +1,20 @@
-const express = require( "express");
+const express = require("express");
 const cors = require("cors");
-const helmet =  require("helmet");
-const { sequelize, User, Role, Permission,  } = require ("./models/index.js");
+const helmet = require("helmet");
+const { sequelize } = require("./models/index.js");
+const routes = require("./routes"); 
 
 const app = express();
+
 app.use(express.json());
 app.use(cors());
-app.use(helmet()); // Helmet helps secure your Express apps by setting various HTTP headers
+app.use(helmet()); // Secure headers
 
 // Test route
 app.get("/", (req, res) => res.send("API is running..."));
+
+// Mount all routes under /api
+app.use("/api", routes);
 
 // Sync DB
 sequelize

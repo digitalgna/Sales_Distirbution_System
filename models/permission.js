@@ -3,7 +3,7 @@ const sequelize = require("../config/db.js");
 
 const Permission = sequelize.define("Permission", {
   id: {
-    type: DataTypes.INTEGER, // ✅ matches Role.permissionId
+    type: DataTypes.INTEGER,
     autoIncrement: true,
     primaryKey: true,
   },
