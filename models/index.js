@@ -67,6 +67,7 @@ Return.belongsTo(Item, { foreignKey: "itemId" });
 
 // ====================== PURCHASE RELATIONSHIPS ======================
 
+
 // SUPPLIER ↔ PURCHASE
 Supplier.hasMany(Purchase, { foreignKey: "supplierId", onDelete: "CASCADE" });
 Purchase.belongsTo(Supplier, { foreignKey: "supplierId" });
@@ -89,7 +90,10 @@ module.exports = {
   Return,
   Supplier,
   Purchase,
-  sequelize, User, Role, Permission
+  sequelize,
+  User,
+  Role,
+  Permission
 };
 
 
