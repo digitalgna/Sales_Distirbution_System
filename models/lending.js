@@ -1,10 +1,11 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/db.js");
-const User = require("./user.js")
+const User = require("./user.js");
 const Customer = require("./customer.js");
 const Item = require("./item.js");
+const Warehouse = require("./wharehouse.js");
 
-const Sales = sequelize.define("Sales", {
+const Lending = sequelize.define("Lending", {
   id: {
     type: DataTypes.INTEGER,
     autoIncrement: true,
@@ -25,8 +26,7 @@ const Sales = sequelize.define("Sales", {
     references: {
         model: Customer,
         key: 'id'
-    },
-    onDelete: 'CASCADE'
+    }
   },
   itemId: {
     type: DataTypes.INTEGER,
@@ -37,43 +37,23 @@ const Sales = sequelize.define("Sales", {
     },
     onDelete: 'CASCADE'
   },
-  quantity:{
+  quantity: {
     type: DataTypes.INTEGER,
-    allowNull:false
+    allowNull: false,
   },
-  totalPrice: {
-    type:DataTypes.DECIMAL(10, 2),
-    allowNull:false
-  },
-  paidAmount: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false
-  },
-  reciept: {
-    type: DataTypes.JSON,
-    allowNull: false
-  },
-  bank: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  salesDate: {
-    type: DataTypes.DATE,
-    allowNull:false
-  },
-  bonus: {
+  warehouseId: {
     type: DataTypes.INTEGER,
-    allowNull: true
+    allowNull: true,
+    references: {
+        model: Warehouse,
+        key: 'id'
+    },
+    onDelete: 'CASCADE'
   },
-  sponsor: {
-    type: DataTypes.INTEGER,
-    allowNull: true
-  },
-  description: {
-    type: DataTypes.STRING,
-    allowNull: true
+  lendingDate: {
+    type:DataTypes.DATE,
+    allowNull:false
   }
-
 });
 
-module.exports = Sales;
+module.exports = Lending;

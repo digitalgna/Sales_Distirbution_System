@@ -1,6 +1,7 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/db.js");
 const Car = require("./carInfo.js");
+const User = require("./user");
 
 const CarOperation = sequelize.define("CarOperation", {
   id: {
@@ -45,9 +46,18 @@ const CarOperation = sequelize.define("CarOperation", {
     },
     onDelete: 'CASCADE'
   },
+  userId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+        model: User,
+        key: 'id'
+    },
+    onDelete: 'CASCADE'
+  },
   assignDate: {
     type: DataTypes.DATE,
-    allowNull: True
+    allowNull: true
   }
 });
 
