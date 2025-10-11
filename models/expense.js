@@ -19,8 +19,9 @@ const Expense = sequelize.define("Expense", {
     type:DataTypes.STRING,
     allowNull:true
   },
-  expenseDate: DataTypes.DATE,
-  allowNull:false
+  expenseDate: {
+    type:DataTypes.DATE,
+    allowNull:false}
 });
 
 module.exports = Expense;

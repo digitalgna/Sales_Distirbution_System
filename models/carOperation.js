@@ -47,7 +47,7 @@ const CarOperation = sequelize.define("CarOperation", {
   },
   assignDate: {
     type: DataTypes.DATE,
-    allowNull: True
+    allowNull: true
   }
 });
 
