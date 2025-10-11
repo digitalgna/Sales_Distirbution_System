@@ -10,8 +10,6 @@ const Sales = require("./sales");
 const Lending = require("./lending.js")
 
 
-
-// Define associations
 Permission.hasMany(Role, {
   foreignKey: "permissionId",
   onDelete: "SET NULL",
