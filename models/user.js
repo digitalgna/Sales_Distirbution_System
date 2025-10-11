@@ -1,6 +1,7 @@
 const DataTypes  = require("sequelize");
 const  sequelize  = require ("../config/db.js");
 const Role = require ("./role.js");
+const Warehouse = require("./wharehouse.js");
 
 const User = sequelize.define("User", {
   id: {
@@ -30,6 +31,15 @@ const User = sequelize.define("User", {
     references: {
         model: Role,
         key: "id"
+    },
+    onDelete: 'CASCADE'
+  },
+  warehouseId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+        model: Warehouse,
+        key: 'id'
     },
     onDelete: 'CASCADE'
   }

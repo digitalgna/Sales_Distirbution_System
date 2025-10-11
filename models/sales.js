@@ -1,7 +1,8 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/db.js");
 const User = require("./user.js")
-const Customer = require("./customer.js")
+const Customer = require("./customer.js");
+const Item = require("./item.js");
 
 const Sales = sequelize.define("Sales", {
   id: {
@@ -24,7 +25,17 @@ const Sales = sequelize.define("Sales", {
     references: {
         model: Customer,
         key: 'id'
-    }
+    },
+    onDelete: 'CASCADE'
+  },
+  itemId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+        model: Item,
+        key: 'id'
+    },
+    onDelete: 'CASCADE'
   },
   quantity:{
     type: DataTypes.INTEGER,
