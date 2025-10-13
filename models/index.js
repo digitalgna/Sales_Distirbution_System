@@ -9,7 +9,6 @@ const CarOperation = require("./carOperation");
 const Sales = require("./sales");
 const Lending = require("./lending.js");
 const Expense = require("./expense.js");
-
 const Category = require("./category.js");
 const Item = require("./item.js");
 const Purchase = require("./purchase.js");
@@ -20,14 +19,19 @@ const Supplier = require("./supplier");
 const Warehouse = require("./wharehouse");
 
 // Define associations
+
+//permission and role 
 Permission.hasMany(Role, {
   foreignKey: "permissionId",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
 
-Role.belongsTo(Permission, { foreignKey: "permissionId" });
+Role.belongsTo(Permission, 
+  { foreignKey: "permissionId" });
 
+
+  //role and user
 Role.hasMany(User, {
   foreignKey: "roleId",
   onDelete: "SET NULL",
@@ -47,7 +51,6 @@ Balance.belongsTo(Customer, {
   as: "customer",
 });
 
-
 // A car can have many operations
 Car.hasMany(CarOperation, {
   foreignKey: "carId",
@@ -62,11 +65,16 @@ CarOperation.belongsTo(Car, {
   as: "car",
 });
 
-// Each CarOperation belongs to a User
-CarOperation.belongsTo(User, { foreignKey: "userId", onDelete: "CASCADE" });
+//  CarOperation and  User
+CarOperation.belongsTo(User, {
+  foreignKey: "userId",
+  onDelete: "CASCADE"
+});
 
-// One User can have many CarOperations
-User.hasMany(CarOperation, { foreignKey: "userId", onDelete: "CASCADE" });
+User.hasMany(CarOperation, {
+  foreignKey: "userId",
+  onDelete: "CASCADE"
+});
 
 // 🧩 1. User ↔ Sales
 User.hasMany(Sales, {
@@ -104,6 +112,7 @@ Lending.belongsTo(User, {
   foreignKey: "userId",
   as: "user",
 });
+
 
 // 🧩 2. Customer ↔ Lending
 Customer.hasMany(Lending, {
@@ -247,5 +256,3 @@ module.exports = {
   Purchase,
   sequelize, User, Role, Permission, Customer, Balance, Car, CarOperation, Sales, Lending, Expense
 };
-
-
