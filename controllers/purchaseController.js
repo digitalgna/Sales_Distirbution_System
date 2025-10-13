@@ -1,7 +1,6 @@
-const Purchase = require("../models/purchase");
-const Customer = require("../models/customer");
-const Item = require("../models/item");
-const Warehouse = require("../models/wharehouse"); // double-check spelling
+const { Op } = require("sequelize");
+const { Purchase, Customer, Item, Warehouse, Store, Supplier, User } = require("../models/index");
+const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 
 const { Op } = require("sequelize");
 
@@ -152,4 +151,240 @@ exports.deletePurchase = async (req, res) => {
     console.error("Error deleting purchase:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
+};
+
+
+// additional functionalities 
+
+// Update stock after purchase
+const updateStockAfterPurchase = async (req, res) => {
+  try {
+    const { purchaseId } = req.params;
+
+    // Validate purchase
+    const purchase = await Purchase.findByPk(purchaseId, {
+      include: [{ model: Item }, { model: Warehouse }],
+    });
+    if (!purchase) {
+      return res.status(404).json({ error: "Purchase not found" });
+    }
+
+    // Find or create store record
+    let store = await Store.findOne({
+      where: { itemId: purchase.itemId, warehouseId: purchase.warehouseId },
+    });
+    if (!store) {
+      store = await Store.create({
+        itemId: purchase.itemId,
+        warehouseId: purchase.warehouseId,
+        quantity: 0,
+      });
+    }
+
+    // Update stock quantity
+    store.quantity += purchase.itemAmount;
+    await store.save();
+
+    // Update Item's totalPrice
+    const item = purchase.Item;
+    item.totalPrice = (item.quantity + purchase.itemAmount) * item.unitPrice;
+    await item.save();
+
+    return res.status(200).json({
+      message: `Stock updated for item '${item.name}' in warehouse '${purchase.Warehouse.name}'`,
+      store: { itemId: store.itemId, warehouseId: store.warehouseId, quantity: store.quantity },
+    });
+  } catch (error) {
+    console.error("Error updating stock after purchase:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Calculate and validate taxes (VAT, excise tax, withholding)
+const calculatePurchaseTaxes = async (req, res) => {
+  try {
+    const { purchaseId } = req.params;
+
+    // Validate purchase
+    const purchase = await Purchase.findByPk(purchaseId);
+    if (!purchase) {
+      return res.status(404).json({ error: "Purchase not found" });
+    }
+
+    // Validate required fields
+    if (!purchase.unitPrice || !purchase.itemAmount) {
+      return res.status(400).json({ error: "unitPrice and itemAmount are required for tax calculation" });
+    }
+
+    // Tax rates (configurable)
+    const VAT_RATE = 0.16; // 16% VAT
+    const EXCISE_TAX_RATE = 0.05; // 5% excise tax
+    const WITHHOLDING_TAX_RATE = 0.02; // 2% withholding tax
+
+    // Calculate taxes
+    const subtotal = purchase.unitPrice * purchase.itemAmount;
+    const vat = subtotal * VAT_RATE;
+    const unitExciseTax = purchase.unitPrice * EXCISE_TAX_RATE;
+    const withholdingAmount = subtotal * WITHHOLDING_TAX_RATE;
+    const totalPrice = (subtotal + vat + (unitExciseTax * purchase.itemAmount)).toFixed(2);
+
+    // Update purchase with calculated values
+    await purchase.update({
+      vat,
+      unitExciseTax,
+      withholdingAmount,
+      totalPrice,
+    });
+
+    return res.status(200).json({
+      message: "Taxes calculated and updated for purchase",
+      purchase: {
+        id: purchase.id,
+        itemAmount: purchase.itemAmount,
+        unitPrice: purchase.unitPrice,
+        vat,
+        unitExciseTax,
+        withholdingAmount,
+        totalPrice,
+      },
+    });
+  } catch (error) {
+    console.error("Error calculating purchase taxes:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Analyze supplier purchase history
+const analyzeSupplierPurchases = async (req, res) => {
+  try {
+    const { supplierId, startDate, endDate } = req.query;
+
+    // Build where clause
+    const where = { supplierId };
+    if (startDate && endDate) {
+      where.date = { [Op.between]: [new Date(startDate), new Date(endDate)] };
+    }
+
+    // Fetch purchase history
+    const purchases = await Purchase.findAll({
+      where,
+      attributes: [
+        [sequelize.fn("SUM", sequelize.col("itemAmount")), "totalItems"],
+        [sequelize.fn("SUM", sequelize.col("totalPrice")), "totalSpent"],
+        [sequelize.fn("COUNT", sequelize.col("id")), "purchaseCount"],
+      ],
+      include: [
+        { model: Item, attributes: ["name"] },
+        { model: Customer, as: "customer", attributes: ["name"] },
+        { model: Warehouse, attributes: ["name"] },
+      ],
+      group: ["Item.id", "Item.name", "customer.id", "customer.name", "Warehouse.id", "Warehouse.name"],
+      raw: true,
+    });
+
+    return res.status(200).json({
+      message: "Supplier purchase history analyzed",
+      supplierId,
+      purchases,
+    });
+  } catch (error) {
+    console.error("Error analyzing supplier purchases:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Track purchase status and notify users
+const trackPurchaseStatus = async (req, res) => {
+  try {
+    const { purchaseId, newStatus } = req.body;
+
+    // Validate inputs
+    if (!purchaseId || !newStatus) {
+      return res.status(400).json({ error: "purchaseId and newStatus are required" });
+    }
+
+    // Validate purchase
+    const purchase = await Purchase.findByPk(purchaseId, {
+      include: [{ model: Customer, as: "customer" }, { model: Warehouse }],
+    });
+    if (!purchase) {
+      return res.status(404).json({ error: "Purchase not found" });
+    }
+
+    // Update status
+    await purchase.update({ status: newStatus });
+
+    // Notify relevant users (e.g., warehouse managers)
+    const users = await User.findAll({
+      where: { warehouseId: purchase.warehouseId },
+      attributes: ["email"],
+    });
+
+    for (const user of users) {
+      await sendEmail({
+        to: user.email,
+        subject: `Purchase Status Update: ${purchase.id}`,
+        text: `Purchase for item ${purchase.itemId} from supplier ${purchase.customer.name} in warehouse ${purchase.Warehouse.name} updated to status: ${newStatus}`,
+      });
+    }
+
+    return res.status(200).json({
+      message: `Purchase status updated to '${newStatus}' and users notified`,
+      purchase: { id: purchase.id, status: purchase.status },
+    });
+  } catch (error) {
+    console.error("Error tracking purchase status:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Validate purchase before creation
+const validatePurchase = async (req, res) => {
+  try {
+    const { supplierId, itemId, warehouseId, itemAmount, unitPrice } = req.body;
+
+    // Validate required fields
+    if (!supplierId || !itemId || !warehouseId || !itemAmount || itemAmount <= 0 || !unitPrice) {
+      return res.status(400).json({ error: "supplierId, itemId, warehouseId, itemAmount, and unitPrice are required" });
+    }
+
+    // Validate supplier (Customer)
+    const supplier = await Customer.findByPk(supplierId);
+    if (!supplier) {
+      return res.status(404).json({ error: "Supplier not found" });
+    }
+
+    // Validate item
+    const item = await Item.findByPk(itemId);
+    if (!item) {
+      return res.status(404).json({ error: "Item not found" });
+    }
+
+    // Validate warehouse
+    const warehouse = await Warehouse.findByPk(warehouseId);
+    if (!warehouse) {
+      return res.status(404).json({ error: "Warehouse not found" });
+    }
+
+    // Validate unitPrice alignment with item
+    if (unitPrice !== item.unitPrice) {
+      return res.status(400).json({ error: `Provided unitPrice (${unitPrice}) does not match item's unitPrice (${item.unitPrice})` });
+    }
+
+    return res.status(200).json({
+      message: "Purchase is valid and can be created",
+      validated: { supplierId, itemId, warehouseId, itemAmount, unitPrice },
+    });
+  } catch (error) {
+    console.error("Error validating purchase:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+module.exports = {
+  updateStockAfterPurchase,
+  calculatePurchaseTaxes,
+  analyzeSupplierPurchases,
+  trackPurchaseStatus,
+  validatePurchase,
 };

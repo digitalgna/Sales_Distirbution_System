@@ -14,13 +14,13 @@ const storeRoutes = require("./storeRoutes");
 
 // Mount routes
 router.use("/permission", permissionRoutes);
-router.use("/item", itemRoutes);
-router.use("/category", categoryRoutes);
-router.use("/warehouse", warehouseRoutes);
-router.use("/purchase", purchaseRoutes);
-router.use("/stockout", stockoutRoutes);
-router.use("/return", returnRoutes);
-router.use("/store", storeRoutes);
+router.use("/items", itemRoutes);
+router.use("/categories", categoryRoutes);
+router.use("/warehouses", warehouseRoutes);
+router.use("/purchases", purchaseRoutes);
+router.use("/stockouts", stockoutRoutes);
+router.use("/returns", returnRoutes);
+router.use("/stores", storeRoutes);
 
 
 module.exports = router;
