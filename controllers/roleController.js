@@ -28,9 +28,9 @@ exports.getAllRoles = async (req, res) => {
     const roles = await Role.findAll({
       include: {
         model: Permission,
-        attributes: ["id", "module", "actions"], // only these
+        attributes: ["id", "module", "actions"], 
       },
-      attributes: ["id", "name", "permissionId"], // role attributes you want
+      attributes: ["id", "name", "permissionId"],
     });
 
     // Format the response

@@ -129,7 +129,7 @@ exports.deleteUser = async (req, res) => {
 // Login user
 exports.loginUser = async (req, res) => {
   try {
-    const { userName, password, warehouseId } = req.body; // optional warehouseId
+    const { userName, password, warehouseId } = req.body;
 
     const user = await User.findOne({
       where: { userName },
@@ -141,17 +141,18 @@ exports.loginUser = async (req, res) => {
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
+    // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
-    // Validate warehouse for roles that need it
-    const warehouseRequiredRoles = ["storekeeper", "sales"]; // adjust roles as needed
-    if (warehouseRequiredRoles.includes(user.Role.name) && !warehouseId) {
-      return res.status(400).json({ message: "Warehouse is required for this role" });
-    }
-
-    if (warehouseId && user.warehouseId !== warehouseId) {
-      return res.status(403).json({ message: "Access denied for this warehouse" });
+    // If the user has a warehouse, warehouseId must be provided
+    if (user.warehouseId) {
+      if (!warehouseId) {
+        return res.status(400).json({ message: "Warehouse ID is required for this user" });
+      }
+      if (parseInt(warehouseId) !== user.warehouseId) {
+        return res.status(403).json({ message: "Access denied for this warehouse" });
+      }
     }
 
     // JWT payload
@@ -187,4 +188,5 @@ exports.loginUser = async (req, res) => {
     res.status(500).json({ message: "Server Error", error });
   }
 };
+
 

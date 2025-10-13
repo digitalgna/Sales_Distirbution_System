@@ -48,7 +48,7 @@ const CarOperation = sequelize.define("CarOperation", {
   },
   userId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
     references: {
         model: User,
         key: 'id'
