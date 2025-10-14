@@ -3,7 +3,7 @@ const { Category, Item, Store, Warehouse } = require("../models/index");
 const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 
 // ✅ CREATE CATEGORY
-exports.createCategory = async (req, res) => {
+const createCategory = async (req, res) => {
   try {
     const { name, description } = req.body;
 
@@ -19,8 +19,7 @@ exports.createCategory = async (req, res) => {
   }
 };
 
-// ✅ READ ALL CATEGORIES
-exports.getCategories = async (req, res) => {
+const getCategories = async (req, res) => {
   try {
     const categories = await Category.findAll({ order: [["createdAt", "DESC"]] });
     res.status(200).json(categories);
@@ -30,7 +29,7 @@ exports.getCategories = async (req, res) => {
 };
 
 // ✅ READ SINGLE CATEGORY
-exports.getCategoryById = async (req, res) => {
+const getCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
     const category = await Category.findByPk(id);
@@ -44,7 +43,7 @@ exports.getCategoryById = async (req, res) => {
 };
 
 // ✅ UPDATE CATEGORY
-exports.updateCategory = async (req, res) => {
+const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -60,7 +59,7 @@ exports.updateCategory = async (req, res) => {
 };
 
 // ✅ DELETE CATEGORY
-exports.deleteCategory = async (req, res) => {
+const deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
     const category = await Category.findByPk(id);
@@ -303,6 +302,11 @@ const notifyCategoryChanges = async (req, res) => {
 };
 
 module.exports = {
+  createCategory,
+  getCategories,
+  getCategoryById,
+  updateCategory,
+  deleteCategory,
   analyzeCategoryItemDistribution,
   validateCategoryUsage,
   generateCategoryInventoryReport,

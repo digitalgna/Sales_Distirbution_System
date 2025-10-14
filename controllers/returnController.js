@@ -3,7 +3,7 @@ const { Return, Item, User, Warehouse, Store, Sales, Purchase } = require("../mo
 const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 
 // ✅ CREATE RETURN
-exports.createReturn = async (req, res) => {
+const createReturn = async (req, res) => {
   try {
     const { itemId, returnQuantity, reason, userId, warehouseId, type, description } = req.body;
 
@@ -40,7 +40,7 @@ exports.createReturn = async (req, res) => {
 };
 
 // ✅ READ ALL RETURNS
-exports.getReturns = async (req, res) => {
+const getReturns = async (req, res) => {
   try {
     const { itemId, userId, warehouseId, type, status } = req.query;
     const where = {};
@@ -69,7 +69,7 @@ exports.getReturns = async (req, res) => {
 };
 
 // ✅ READ SINGLE RETURN
-exports.getReturnById = async (req, res) => {
+const getReturnById = async (req, res) => {
   try {
     const { id } = req.params;
     const returnRecord = await Return.findByPk(id, {
@@ -90,7 +90,7 @@ exports.getReturnById = async (req, res) => {
 };
 
 // ✅ UPDATE RETURN
-exports.updateReturn = async (req, res) => {
+const updateReturn = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -107,7 +107,7 @@ exports.updateReturn = async (req, res) => {
 };
 
 // ✅ DELETE RETURN
-exports.deleteReturn = async (req, res) => {
+const deleteReturn = async (req, res) => {
   try {
     const { id } = req.params;
     const returnRecord = await Return.findByPk(id);
@@ -389,6 +389,11 @@ const notifyReturnStatusChange = async (req, res) => {
 };
 
 module.exports = {
+  createReturn,
+  getReturns,
+  getReturnById,
+  updateReturn,
+  deleteReturn,
   processReturn,
   validateReturn,
   generateReturnSummary,

@@ -15,7 +15,7 @@ router.patch('/:purchaseId/update-stock', purchaseController.updateStockAfterPur
 router.patch('/:purchaseId/calculate-taxes', purchaseController.calculatePurchaseTaxes);
 
 // Purchase analytics and reporting routes
-router.get('/analytics/supplier-purchases', purchaseController.analyzeSupplierPurchases);
+// router.get('/analytics/supplier-purchases', purchaseController.analyzeSupplierPurchases);
 
 // Purchase status and validation routes
 router.post('/track-status', purchaseController.trackPurchaseStatus);

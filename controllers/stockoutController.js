@@ -3,7 +3,7 @@ const { Stockout, Store, Item, Warehouse, Sales, Car, User, Return } = require("
 const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 
 // ✅ CREATE STOCKOUT
-exports.createStockout = async (req, res) => {
+const createStockout = async (req, res) => {
   try {
     const { name, amount, sponsor, bonus, salesId, carId } = req.body;
 
@@ -28,7 +28,7 @@ exports.createStockout = async (req, res) => {
 };
 
 // ✅ READ ALL STOCKOUTS
-exports.getStockouts = async (req, res) => {
+const getStockouts = async (req, res) => {
   try {
     const stockouts = await Stockout.findAll({ order: [["createdAt", "DESC"]] });
     res.status(200).json(stockouts);
@@ -39,7 +39,7 @@ exports.getStockouts = async (req, res) => {
 };
 
 // ✅ READ SINGLE STOCKOUT
-exports.getStockoutById = async (req, res) => {
+const getStockoutById = async (req, res) => {
   try {
     const { id } = req.params;
     const stockout = await Stockout.findByPk(id);
@@ -54,7 +54,7 @@ exports.getStockoutById = async (req, res) => {
 };
 
 // ✅ UPDATE STOCKOUT
-exports.updateStockout = async (req, res) => {
+const updateStockout = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -71,7 +71,7 @@ exports.updateStockout = async (req, res) => {
 };
 
 // ✅ DELETE STOCKOUT
-exports.deleteStockout = async (req, res) => {
+const deleteStockout = async (req, res) => {
   try {
     const { id } = req.params;
     const stockout = await Stockout.findByPk(id);
@@ -334,6 +334,11 @@ const reconcileStockoutWithReturn = async (req, res) => {
 };
 
 module.exports = {
+  createStockout,
+  getStockouts,
+  getStockoutById,
+  updateStockout,
+  deleteStockout,
   validateStockAvailability,
   linkStockoutToSaleOrCar,
   calculateStockoutBonus,

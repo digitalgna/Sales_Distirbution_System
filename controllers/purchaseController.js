@@ -1,14 +1,12 @@
 const { Op } = require("sequelize");
-const { Purchase, Customer, Item, Warehouse, Store, Supplier, User } = require("../models/index");
+const { Purchase, Customer, Item, Warehouse, Store,  User } = require("../models/index");
 const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 
-const { Op } = require("sequelize");
 
 // ✅ CREATE PURCHASE
-exports.createPurchase = async (req, res) => {
+const createPurchase = async (req, res) => {
   try {
     const {
-      supplierId,
       itemId,
       warehouseId,
       itemAmount,
@@ -25,23 +23,21 @@ exports.createPurchase = async (req, res) => {
     } = req.body;
 
     // Basic validations
-    if (!supplierId || !itemId || !warehouseId || !itemAmount || !unitPrice) {
+    if (!itemId || !warehouseId || !itemAmount || !unitPrice) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
     // Check if related models exist
-    const supplier = await Customer.findByPk(supplierId);
     const item = await Item.findByPk(itemId);
     const warehouse = await Warehouse.findByPk(warehouseId);
 
-    if (!supplier || !item || !warehouse) {
-      return res.status(404).json({ message: "Supplier, Item, or Warehouse not found" });
+    if (!item || !warehouse) {
+      return res.status(404).json({ message: "Item or Warehouse not found" });
     }
 
     const totalPrice = itemAmount * unitPrice;
 
     const newPurchase = await Purchase.create({
-      supplierId,
       itemId,
       warehouseId,
       itemAmount,
@@ -66,12 +62,11 @@ exports.createPurchase = async (req, res) => {
 };
 
 // ✅ READ ALL PURCHASES (optional filters)
-exports.getPurchases = async (req, res) => {
+const getPurchases = async (req, res) => {
   try {
-    const { supplierId, itemId, warehouseId, status, search } = req.query;
+    const { itemId, warehouseId, status, search } = req.query;
     const where = {};
 
-    if (supplierId) where.supplierId = supplierId;
     if (itemId) where.itemId = itemId;
     if (warehouseId) where.warehouseId = warehouseId;
     if (status) where.status = status;
@@ -94,7 +89,7 @@ exports.getPurchases = async (req, res) => {
 };
 
 // ✅ READ SINGLE PURCHASE
-exports.getPurchaseById = async (req, res) => {
+const getPurchaseById = async (req, res) => {
   try {
     const { id } = req.params;
     const purchase = await Purchase.findByPk(id, {
@@ -115,7 +110,7 @@ exports.getPurchaseById = async (req, res) => {
 };
 
 // ✅ UPDATE PURCHASE
-exports.updatePurchase = async (req, res) => {
+const updatePurchase = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -139,7 +134,7 @@ exports.updatePurchase = async (req, res) => {
 };
 
 // ✅ DELETE PURCHASE
-exports.deletePurchase = async (req, res) => {
+const deletePurchase = async (req, res) => {
   try {
     const { id } = req.params;
     const purchase = await Purchase.findByPk(id);
@@ -254,44 +249,6 @@ const calculatePurchaseTaxes = async (req, res) => {
   }
 };
 
-// Analyze supplier purchase history
-const analyzeSupplierPurchases = async (req, res) => {
-  try {
-    const { supplierId, startDate, endDate } = req.query;
-
-    // Build where clause
-    const where = { supplierId };
-    if (startDate && endDate) {
-      where.date = { [Op.between]: [new Date(startDate), new Date(endDate)] };
-    }
-
-    // Fetch purchase history
-    const purchases = await Purchase.findAll({
-      where,
-      attributes: [
-        [sequelize.fn("SUM", sequelize.col("itemAmount")), "totalItems"],
-        [sequelize.fn("SUM", sequelize.col("totalPrice")), "totalSpent"],
-        [sequelize.fn("COUNT", sequelize.col("id")), "purchaseCount"],
-      ],
-      include: [
-        { model: Item, attributes: ["name"] },
-        { model: Customer, as: "customer", attributes: ["name"] },
-        { model: Warehouse, attributes: ["name"] },
-      ],
-      group: ["Item.id", "Item.name", "customer.id", "customer.name", "Warehouse.id", "Warehouse.name"],
-      raw: true,
-    });
-
-    return res.status(200).json({
-      message: "Supplier purchase history analyzed",
-      supplierId,
-      purchases,
-    });
-  } catch (error) {
-    console.error("Error analyzing supplier purchases:", error);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-};
 
 // Track purchase status and notify users
 const trackPurchaseStatus = async (req, res) => {
@@ -341,18 +298,13 @@ const trackPurchaseStatus = async (req, res) => {
 // Validate purchase before creation
 const validatePurchase = async (req, res) => {
   try {
-    const { supplierId, itemId, warehouseId, itemAmount, unitPrice } = req.body;
+    const { itemId, warehouseId, itemAmount, unitPrice } = req.body;
 
     // Validate required fields
-    if (!supplierId || !itemId || !warehouseId || !itemAmount || itemAmount <= 0 || !unitPrice) {
-      return res.status(400).json({ error: "supplierId, itemId, warehouseId, itemAmount, and unitPrice are required" });
+    if (!itemId || !warehouseId || !itemAmount || itemAmount <= 0 || !unitPrice) {
+      return res.status(400).json({ error: "itemId, warehouseId, itemAmount, and unitPrice are required" });
     }
 
-    // Validate supplier (Customer)
-    const supplier = await Customer.findByPk(supplierId);
-    if (!supplier) {
-      return res.status(404).json({ error: "Supplier not found" });
-    }
 
     // Validate item
     const item = await Item.findByPk(itemId);
@@ -373,7 +325,7 @@ const validatePurchase = async (req, res) => {
 
     return res.status(200).json({
       message: "Purchase is valid and can be created",
-      validated: { supplierId, itemId, warehouseId, itemAmount, unitPrice },
+      validated: { itemId, warehouseId, itemAmount, unitPrice },
     });
   } catch (error) {
     console.error("Error validating purchase:", error);
@@ -382,9 +334,13 @@ const validatePurchase = async (req, res) => {
 };
 
 module.exports = {
+  createPurchase,
+  getPurchases,
+  getPurchaseById,
+  updatePurchase,
+  deletePurchase,
   updateStockAfterPurchase,
   calculatePurchaseTaxes,
-  analyzeSupplierPurchases,
   trackPurchaseStatus,
   validatePurchase,
 };

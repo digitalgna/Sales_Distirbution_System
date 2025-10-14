@@ -3,7 +3,7 @@ const { Store, Item, Warehouse, User } = require("../models/index");
 const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 
 // ✅ CREATE STORE RECORD
-exports.createStore = async (req, res) => {
+const createStore = async (req, res) => {
   try {
     const { itemId, warehouseId, quantity } = req.body;
 
@@ -32,7 +32,7 @@ exports.createStore = async (req, res) => {
 };
 
 // ✅ READ ALL STORE RECORDS
-exports.getStores = async (req, res) => {
+const getStores = async (req, res) => {
   try {
     const { itemId, warehouseId } = req.query;
     const where = {};
@@ -57,7 +57,7 @@ exports.getStores = async (req, res) => {
 };
 
 // ✅ READ SINGLE STORE RECORD
-exports.getStoreById = async (req, res) => {
+const getStoreById = async (req, res) => {
   try {
     const { id } = req.params;
     const store = await Store.findByPk(id, {
@@ -77,7 +77,7 @@ exports.getStoreById = async (req, res) => {
 };
 
 // ✅ UPDATE STORE RECORD
-exports.updateStore = async (req, res) => {
+const updateStore = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -94,7 +94,7 @@ exports.updateStore = async (req, res) => {
 };
 
 // ✅ DELETE STORE RECORD
-exports.deleteStore = async (req, res) => {
+const deleteStore = async (req, res) => {
   try {
     const { id } = req.params;
     const store = await Store.findByPk(id);
@@ -304,6 +304,11 @@ const getStockHistory = async (req, res) => {
 };
 
 module.exports = {
+  createStore,
+  getStores,
+  getStoreById,
+  updateStore,
+  deleteStore,
   adjustStockQuantity,
   checkLowStock,
   transferStock,

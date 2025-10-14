@@ -6,15 +6,6 @@ const Warehouse = require("./wharehouse.js");
 
 const Purchase = sequelize.define("Purchase", {
   id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-  supplierId: { 
-    type: DataTypes.INTEGER, 
-    allowNull: false,
-    references: {
-      model: Customer,
-      key: 'id'
-    },
-    onDelete: 'CASCADE'
-  },
   itemId: { 
     type: DataTypes.INTEGER, 
     allowNull: false,

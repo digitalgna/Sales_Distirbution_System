@@ -3,7 +3,7 @@ const { Item, Category, Warehouse, Store, Sales, Lending, Purchase, Stockout, Re
 const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 
 // ✅ CREATE ITEM
-exports.createItem = async (req, res) => {
+const createItem = async (req, res) => {
   try {
     const {
       categoryId,
@@ -56,7 +56,7 @@ exports.createItem = async (req, res) => {
 };
 
 // ✅ READ ALL ITEMS (with optional filters)
-exports.getItems = async (req, res) => {
+const getItems = async (req, res) => {
   try {
     const { search, categoryId, warehouseId } = req.query;
 
@@ -82,7 +82,7 @@ exports.getItems = async (req, res) => {
 };
 
 // ✅ READ SINGLE ITEM
-exports.getItemById = async (req, res) => {
+const getItemById = async (req, res) => {
   try {
     const { id } = req.params;
     const item = await Item.findByPk(id, {
@@ -100,8 +100,7 @@ exports.getItemById = async (req, res) => {
   }
 };
 
-// ✅ UPDATE ITEM
-exports.updateItem = async (req, res) => {
+const updateItem = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -124,7 +123,7 @@ exports.updateItem = async (req, res) => {
 };
 
 // ✅ DELETE ITEM
-exports.deleteItem = async (req, res) => {
+const deleteItem = async (req, res) => {
   try {
     const { id } = req.params;
     const item = await Item.findByPk(id);
@@ -388,6 +387,11 @@ const validateItemForTransaction = async (req, res) => {
 };
 
 module.exports = {
+  createItem,
+  getItems,
+  getItemById,
+  updateItem,
+  deleteItem,
   updateItemTotalPrice,
   checkLowStockAndExpiration,
   generateItemTransactionReport,

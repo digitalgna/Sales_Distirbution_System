@@ -3,7 +3,7 @@ const { Warehouse, User, Item, Store, Lending, Purchase, Stockout, Return } = re
 const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 
 // ✅ CREATE WAREHOUSE
-exports.createWarehouse = async (req, res) => {
+const createWarehouse = async (req, res) => {
   try {
     const { name, address, size } = req.body;
 
@@ -20,7 +20,7 @@ exports.createWarehouse = async (req, res) => {
 };
 
 // ✅ READ ALL WAREHOUSES
-exports.getWarehouses = async (req, res) => {
+const getWarehouses = async (req, res) => {
   try {
     const warehouses = await Warehouse.findAll({ order: [["createdAt", "DESC"]] });
     res.status(200).json(warehouses);
@@ -30,7 +30,7 @@ exports.getWarehouses = async (req, res) => {
 };
 
 // ✅ READ SINGLE WAREHOUSE
-exports.getWarehouseById = async (req, res) => {
+const getWarehouseById = async (req, res) => {
   try {
     const { id } = req.params;
     const warehouse = await Warehouse.findByPk(id);
@@ -44,7 +44,7 @@ exports.getWarehouseById = async (req, res) => {
 };
 
 // ✅ UPDATE WAREHOUSE
-exports.updateWarehouse = async (req, res) => {
+const updateWarehouse = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -60,7 +60,7 @@ exports.updateWarehouse = async (req, res) => {
 };
 
 // ✅ DELETE WAREHOUSE
-exports.deleteWarehouse = async (req, res) => {
+const deleteWarehouse = async (req, res) => {
   try {
     const { id } = req.params;
     const warehouse = await Warehouse.findByPk(id);
@@ -312,6 +312,11 @@ const monitorWarehouseHealth = async (req, res) => {
 };
 
 module.exports = {
+  createWarehouse,
+  getWarehouses,
+  getWarehouseById,
+  updateWarehouse,
+  deleteWarehouse,
   checkWarehouseCapacity,
   assignUsersToWarehouse,
   getWarehouseInventoryOverview,
