@@ -9,7 +9,6 @@ const CarOperation = require("./carOperation");
 const Sales = require("./sales");
 const Lending = require("./lending.js");
 const Expense = require("./expense.js");
-
 const Category = require("./category.js");
 const Item = require("./item.js");
 const Purchase = require("./purchase.js");
@@ -20,14 +19,19 @@ const Supplier = require("./supplier");
 const Warehouse = require("./wharehouse");
 
 // Define associations
+
+//permission and role 
 Permission.hasMany(Role, {
   foreignKey: "permissionId",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
 
-Role.belongsTo(Permission, { foreignKey: "permissionId" });
+Role.belongsTo(Permission, 
+  { foreignKey: "permissionId" });
 
+
+  //role and user
 Role.hasMany(User, {
   foreignKey: "roleId",
   onDelete: "SET NULL",
@@ -47,73 +51,69 @@ Balance.belongsTo(Customer, {
   as: "customer",
 });
 
-
 // A car can have many operations
 Car.hasMany(CarOperation, {
   foreignKey: "carId",
   as: "operations",
   onDelete: "CASCADE",
 });
-
 // Each operation belongs to a car
 CarOperation.belongsTo(Car, {
   foreignKey: "carId",
   as: "car",
 });
 
-// Each CarOperation belongs to a User
-CarOperation.belongsTo(User, { foreignKey: "userId", onDelete: "CASCADE" });
+//  CarOperation and  User
+CarOperation.belongsTo(User, {
+  foreignKey: "userId",
+  onDelete: "CASCADE"
+});
 
-// One User can have many CarOperations
-User.hasMany(CarOperation, { foreignKey: "userId", onDelete: "CASCADE" });
+User.hasMany(CarOperation, {
+  foreignKey: "userId",
+  onDelete: "CASCADE"
+});
 
 // 🧩 1. User ↔ Sales
 User.hasMany(Sales, {
   foreignKey: "userId",
-  as: "sales",
   onDelete: "CASCADE",
 });
 
 Sales.belongsTo(User, {
   foreignKey: "userId",
-  as: "user",
 });
 
 // 🧩 2. Customer ↔ Sales
 Customer.hasMany(Sales, {
   foreignKey: "customerId",
-  as: "sales",
   onDelete: "SET NULL",
 });
 
 Sales.belongsTo(Customer, {
   foreignKey: "customerId",
-  as: "customer",
 });
 
 
 // 🧩 1. User ↔ Lending
 User.hasMany(Lending, {
   foreignKey: "userId",
-  as: "lendings",
   onDelete: "CASCADE",
 });
 
 Lending.belongsTo(User, {
   foreignKey: "userId",
-  as: "user",
 });
+
 
 // 🧩 2. Customer ↔ Lending
 Customer.hasMany(Lending, {
   foreignKey: "customerId",
-  as: "lendings",
   onDelete: "SET NULL",
 });
 
 Lending.belongsTo(Customer, {
   foreignKey: "customerId",
-  as: "customer",
 });
 
 // One warehouse can have many users
@@ -246,5 +246,3 @@ module.exports = {
   Purchase,
   sequelize, User, Role, Permission, Customer, Balance, Car, CarOperation, Sales, Lending, Expense
 };
-
-

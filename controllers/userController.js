@@ -143,70 +143,67 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-// LOGIN user (role-based)
+// Login user
 exports.loginUser = async (req, res) => {
-  const { userName, password, roleId } = req.body;
-
-  if (!userName || !password || !roleId) {
-    return res
-      .status(400)
-      .json({ message: "userName, password and roleId are required" });
-  }
-
   try {
+    const { userName, password, warehouseId } = req.body;
+
     const user = await User.findOne({
-      where: { userName, roleId },
+      where: { userName },
       include: [
         { model: Role, attributes: ["id", "name"] },
         { model: Warehouse, attributes: ["id", "name"] },
       ],
     });
 
-    if (!user) {
-      return res
-        .status(404)
-        .json({ message: "User not found or role mismatch" });
-    }
+    if (!user) return res.status(404).json({ message: "User not found" });
 
+    // Check password
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials" });
+    if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
+
+    // If the user has a warehouse, warehouseId must be provided
+    if (user.warehouseId) {
+      if (!warehouseId) {
+        return res.status(400).json({ message: "Warehouse ID is required for this user" });
+      }
+      if (parseInt(warehouseId) !== user.warehouseId) {
+        return res.status(403).json({ message: "Access denied for this warehouse" });
+      }
     }
 
-    // ✅ Convert to plain object before extracting associations
-    const userData = user.toJSON();
-
-    // ✅ Safely extract role & warehouse info
-    const roleIdVal = userData.Role?.id || userData.roleId || null;
-    const roleNameVal = userData.Role?.name || null;
-    const warehouseIdVal =
-      userData.Warehouse?.id || userData.warehouseId || null;
-    const warehouseNameVal = userData.Warehouse?.name || null;
-
-    // ✅ Generate JWT with correct data
+    // JWT payload
     const token = jwt.sign(
       {
-        id: userData.id,
-        fullName: userData.fullName,
-        roleId: roleIdVal,
-        roleName: roleNameVal,
-        warehouseId: warehouseIdVal,
-        warehouseName: warehouseNameVal,
+        id: user.id,
+        fullName: user.fullName,
+        roleId: user.roleId,
+        roleName: user.Role ? user.Role.name : null,
+        warehouseId: user.warehouseId,
+        warehouseName: user.Warehouse ? user.Warehouse.name : null,
       },
-      JWT_SECRET,
+      process.env.JWT_SECRET || "your_jwt_secret_key",
       { expiresIn: "1d" }
     );
 
-    // ✅ Remove password before sending user data
-    const { password: _, ...safeUser } = userData;
-
     res.status(200).json({
       message: "Login successful",
-      user: safeUser,
       token,
+      user: {
+        id: user.id,
+        fullName: user.fullName,
+        userName: user.userName,
+        phone: user.phone,
+        roleId: user.roleId,
+        roleName: user.Role ? user.Role.name : null,
+        warehouseId: user.warehouseId,
+        warehouseName: user.Warehouse ? user.Warehouse.name : null,
+      },
     });
   } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ message: "Login failed", error: error.message });
+    console.error("Login Error:", error);
+    res.status(500).json({ message: "Server Error", error });
   }
 };
+
+
