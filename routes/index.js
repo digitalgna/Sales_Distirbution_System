@@ -31,6 +31,9 @@ router.use("/purchase", purchaseRoutes);
 router.use("/stockout", stockoutRoutes);
 router.use("/return", returnRoutes);
 router.use("/store", storeRoutes);
+router.use("/user", userRoutes);
+router.use("/role", roleRoutes);
+
 
 
 module.exports = router;

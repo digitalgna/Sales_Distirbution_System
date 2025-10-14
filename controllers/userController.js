@@ -41,6 +41,7 @@ exports.createUser = async (req, res) => {
   }
 };
 
+
 // GET all users
 exports.getAllUsers = async (req, res) => {
   try {
