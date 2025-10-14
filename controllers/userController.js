@@ -9,15 +9,19 @@ const JWT_SECRET = process.env.JWT_SECRET || "secretkey"; // use env in producti
 // CREATE user
 exports.createUser = async (req, res) => {
   try {
-    const { fullName, userName, password, phone, roleId, warehouseId } = req.body;
+    const { fullName, userName, password, phone, roleId, warehouseId } =
+      req.body;
 
     if (!fullName || !userName || !password || !roleId) {
-      return res.status(400).json({ message: "fullName, userName, password and roleId are required" });
+      return res.status(400).json({
+        message: "fullName, userName, password and roleId are required",
+      });
     }
 
     // Check if userName exists
     const existingUser = await User.findOne({ where: { userName } });
-    if (existingUser) return res.status(400).json({ message: "Username already exists" });
+    if (existingUser)
+      return res.status(400).json({ message: "Username already exists" });
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -34,7 +38,6 @@ exports.createUser = async (req, res) => {
     // Exclude password from response
     const { password: _, ...userData } = user.toJSON();
     res.status(201).json(userData);
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to create user", error });
@@ -45,7 +48,14 @@ exports.createUser = async (req, res) => {
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.findAll({
-      attributes: ["id", "fullName", "userName", "phone", "roleId", "warehouseId"],
+      attributes: [
+        "id",
+        "fullName",
+        "userName",
+        "phone",
+        "roleId",
+        "warehouseId",
+      ],
       include: [
         { model: Role, attributes: ["id", "name"] },
         { model: Warehouse, attributes: ["id", "name"] },
@@ -63,7 +73,14 @@ exports.getUserById = async (req, res) => {
   const { id } = req.params;
   try {
     const user = await User.findByPk(id, {
-      attributes: ["id", "fullName", "userName", "phone", "roleId", "warehouseId"],
+      attributes: [
+        "id",
+        "fullName",
+        "userName",
+        "phone",
+        "roleId",
+        "warehouseId",
+      ],
       include: [
         { model: Role, attributes: ["id", "name"] },
         { model: Warehouse, attributes: ["id", "name"] },
@@ -88,7 +105,8 @@ exports.updateUser = async (req, res) => {
 
     if (userName && userName !== user.userName) {
       const existingUser = await User.findOne({ where: { userName } });
-      if (existingUser) return res.status(400).json({ message: "Username already exists" });
+      if (existingUser)
+        return res.status(400).json({ message: "Username already exists" });
       user.userName = userName;
     }
 
@@ -105,7 +123,6 @@ exports.updateUser = async (req, res) => {
 
     const { password: _, ...userData } = user.toJSON();
     res.status(200).json(userData);
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to update user", error });
@@ -131,24 +148,65 @@ exports.loginUser = async (req, res) => {
   const { userName, password, roleId } = req.body;
 
   if (!userName || !password || !roleId) {
-    return res.status(400).json({ message: "userName, password and roleId are required" });
+    return res
+      .status(400)
+      .json({ message: "userName, password and roleId are required" });
   }
 
   try {
-    const user = await User.findOne({ where: { userName, roleId } });
-    if (!user) return res.status(404).json({ message: "User not found or role mismatch" });
+    const user = await User.findOne({
+      where: { userName, roleId },
+      include: [
+        { model: Role, attributes: ["id", "name"] },
+        { model: Warehouse, attributes: ["id", "name"] },
+      ],
+    });
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ message: "User not found or role mismatch" });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
-    // Generate JWT token
-    const token = jwt.sign({ id: user.id, roleId: user.roleId }, JWT_SECRET, { expiresIn: "1d" });
+    // ✅ Convert to plain object before extracting associations
+    const userData = user.toJSON();
 
-    const { password: _, ...userData } = user.toJSON();
-    res.status(200).json({ user: userData, token });
+    // ✅ Safely extract role & warehouse info
+    const roleIdVal = userData.Role?.id || userData.roleId || null;
+    const roleNameVal = userData.Role?.name || null;
+    const warehouseIdVal =
+      userData.Warehouse?.id || userData.warehouseId || null;
+    const warehouseNameVal = userData.Warehouse?.name || null;
 
+    // ✅ Generate JWT with correct data
+    const token = jwt.sign(
+      {
+        id: userData.id,
+        fullName: userData.fullName,
+        roleId: roleIdVal,
+        roleName: roleNameVal,
+        warehouseId: warehouseIdVal,
+        warehouseName: warehouseNameVal,
+      },
+      JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    // ✅ Remove password before sending user data
+    const { password: _, ...safeUser } = userData;
+
+    res.status(200).json({
+      message: "Login successful",
+      user: safeUser,
+      token,
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Login failed", error });
+    console.error("Login error:", error);
+    res.status(500).json({ message: "Login failed", error: error.message });
   }
 };
