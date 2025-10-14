@@ -126,29 +126,67 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-// LOGIN user (role-based)
+// Login user
 exports.loginUser = async (req, res) => {
-  const { userName, password, roleId } = req.body;
-
-  if (!userName || !password || !roleId) {
-    return res.status(400).json({ message: "userName, password and roleId are required" });
-  }
-
   try {
-    const user = await User.findOne({ where: { userName, roleId } });
-    if (!user) return res.status(404).json({ message: "User not found or role mismatch" });
+    const { userName, password, warehouseId } = req.body;
 
+    const user = await User.findOne({
+      where: { userName },
+      include: [
+        { model: Role, attributes: ["id", "name"] },
+        { model: Warehouse, attributes: ["id", "name"] },
+      ],
+    });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
-    // Generate JWT token
-    const token = jwt.sign({ id: user.id, roleId: user.roleId }, JWT_SECRET, { expiresIn: "1d" });
+    // If the user has a warehouse, warehouseId must be provided
+    if (user.warehouseId) {
+      if (!warehouseId) {
+        return res.status(400).json({ message: "Warehouse ID is required for this user" });
+      }
+      if (parseInt(warehouseId) !== user.warehouseId) {
+        return res.status(403).json({ message: "Access denied for this warehouse" });
+      }
+    }
 
-    const { password: _, ...userData } = user.toJSON();
-    res.status(200).json({ user: userData, token });
+    // JWT payload
+    const token = jwt.sign(
+      {
+        id: user.id,
+        fullName: user.fullName,
+        roleId: user.roleId,
+        roleName: user.Role ? user.Role.name : null,
+        warehouseId: user.warehouseId,
+        warehouseName: user.Warehouse ? user.Warehouse.name : null,
+      },
+      process.env.JWT_SECRET || "your_jwt_secret_key",
+      { expiresIn: "1d" }
+    );
 
+    res.status(200).json({
+      message: "Login successful",
+      token,
+      user: {
+        id: user.id,
+        fullName: user.fullName,
+        userName: user.userName,
+        phone: user.phone,
+        roleId: user.roleId,
+        roleName: user.Role ? user.Role.name : null,
+        warehouseId: user.warehouseId,
+        warehouseName: user.Warehouse ? user.Warehouse.name : null,
+      },
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Login failed", error });
+    console.error("Login Error:", error);
+    res.status(500).json({ message: "Server Error", error });
   }
 };
+
+

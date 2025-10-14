@@ -56,8 +56,6 @@ Car.hasMany(CarOperation, {
   as: "operations",
   onDelete: "CASCADE",
 });
-
-
 // Each operation belongs to a car
 CarOperation.belongsTo(Car, {
   foreignKey: "carId",
@@ -78,51 +76,43 @@ User.hasMany(CarOperation, {
 // 🧩 1. User ↔ Sales
 User.hasMany(Sales, {
   foreignKey: "userId",
-  as: "sales",
   onDelete: "CASCADE",
 });
 
 Sales.belongsTo(User, {
   foreignKey: "userId",
-  as: "user",
 });
 
 // 🧩 2. Customer ↔ Sales
 Customer.hasMany(Sales, {
   foreignKey: "customerId",
-  as: "sales",
   onDelete: "SET NULL",
 });
 
 Sales.belongsTo(Customer, {
   foreignKey: "customerId",
-  as: "customer",
 });
 
 
 // 🧩 1. User ↔ Lending
 User.hasMany(Lending, {
   foreignKey: "userId",
-  as: "lendings",
   onDelete: "CASCADE",
 });
 
 Lending.belongsTo(User, {
   foreignKey: "userId",
-  as: "user",
 });
 
 
 // 🧩 2. Customer ↔ Lending
 Customer.hasMany(Lending, {
   foreignKey: "customerId",
-  as: "lendings",
   onDelete: "SET NULL",
 });
 
 Lending.belongsTo(Customer, {
   foreignKey: "customerId",
-  as: "customer",
 });
 
 // One warehouse can have many users
