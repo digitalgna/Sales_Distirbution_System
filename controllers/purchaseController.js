@@ -149,6 +149,8 @@ const getPurchaseById = async (req, res) => {
   }
 };
 
+
+
 // ✅ UPDATE PURCHASE
 const updatePurchase = async (req, res) => {
   try {
