@@ -5,10 +5,26 @@ const Stockout = sequelize.define("Stockout", {
   id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
   name: DataTypes.STRING,
   amount: { type: DataTypes.INTEGER, allowNull: false },
-  sponsor: DataTypes.STRING,
-  bonus: DataTypes.STRING,
-  salesId: DataTypes.INTEGER,
-  carId: DataTypes.INTEGER,
+  sponsor: DataTypes.INTEGER,
+  bonus: DataTypes.INTEGER,
+  salesId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'Sales',
+      key: 'id'
+    },
+    onDelete: 'CASCADE'
+  },
+  carId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'Cars',
+      key: 'id'
+    },
+    onDelete: 'CASCADE'
+  },
 }, {
   timestamps: true,
 });

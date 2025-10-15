@@ -16,6 +16,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Test route
 app.get("/", (req, res) => res.send("API is running..."));
+app.use(express.urlencoded({ extended: true }));
 
 // Mount all routes under /api
 app.use("/api", routes);

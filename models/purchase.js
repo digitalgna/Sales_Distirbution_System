@@ -13,8 +13,19 @@ const Purchase = sequelize.define("Purchase", {
       model: Item,
       key: 'id'
     },
-    onDelete: 'CASCADE'
+    
+    onDelete: 'CASCADE' 
   },
+  customerId: { // <-- Add this
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: Customer,
+      key: 'id',
+    },
+    onDelete: 'CASCADE',
+  },
+
   warehouseId: { 
     type: DataTypes.INTEGER, 
     allowNull: false,
@@ -27,13 +38,13 @@ const Purchase = sequelize.define("Purchase", {
   itemAmount: { type: DataTypes.INTEGER, allowNull: false },
   totalPrice: { type: DataTypes.DECIMAL(12,2), allowNull: false },
   unitPrice: { type: DataTypes.DECIMAL(12,2) },
-  status: DataTypes.STRING,
+  status: {type: DataTypes.ENUM('pending', 'completed', 'cancelled'), allowNull: true},
   withholdingAmount: DataTypes.DECIMAL(12,2),
   date: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
-  sponsor: DataTypes.STRING,
-  bonus: DataTypes.STRING,
+  sponsor: DataTypes.INTEGER,
+  bonus: DataTypes.INTEGER,
   carId: DataTypes.INTEGER,
-  chargedCost: DataTypes.DECIMAL(12,2),
+  chargedCost: DataTypes.DECIMAL(12,2),// transportation or delivery cost
   unitExciseTax: DataTypes.DECIMAL(12,2),
   vat: DataTypes.DECIMAL(12,2),
 }, {

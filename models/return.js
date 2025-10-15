@@ -48,7 +48,7 @@ const Return = sequelize.define("Return", {
     allowNull: true
   },
   type: {
-    type: DataTypes.ENUM('sale', 'purchase'),
+    type: DataTypes.ENUM('sale', 'purchase', 'sponsor', 'bonus'),
     allowNull: false
   }
 }, {

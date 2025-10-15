@@ -33,7 +33,12 @@ router.use("/return", returnRoutes);
 router.use("/store", storeRoutes);
 router.use("/user", userRoutes);
 router.use("/role", roleRoutes);
-
-
+router.use("/expense", expenseRoutes);
+router.use("/car", carRoutes);
+router.use("/car-operation", carOperationRoutes);
+router.use("/customer", customerRoutes);
+router.use("/balance", balanceRoutes);
+router.use("/sales", salesRoutes);
+router.use("/lending", lendingRoutes);
 
 module.exports = router;

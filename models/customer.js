@@ -16,7 +16,7 @@ const Customer = sequelize.define("Customer", {
     allowNull: true,
   },
   type: {
-    type: DataTypes.ENUM('customer'),
+    type: DataTypes.ENUM('supplier', 'buyer'),
     allowNull: false
   },
   phoneNumber: {

@@ -17,32 +17,47 @@ const Stockout = require("./stockout.js");
 const Store = require("./store.js");
 const Warehouse = require("./wharehouse");
 
-// Define associations
+// ====================== AUTH & USER MANAGEMENT ======================
 
-//permission and role 
+
+// Permission and Role
 Permission.hasMany(Role, {
   foreignKey: "permissionId",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
+Role.belongsTo(Permission, { foreignKey: "permissionId" });
 
-Role.belongsTo(Permission, 
-  { foreignKey: "permissionId" });
-
-
-  //role and user
+// Role and User
 Role.hasMany(User, {
   foreignKey: "roleId",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-
 User.belongsTo(Role, { foreignKey: "roleId" });
 
-//customer and balance
+// Warehouse and User
+Warehouse.hasMany(User, {
+  foreignKey: "warehouseId",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+User.belongsTo(Warehouse, {
+  foreignKey: "warehouseId",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+
+// Purchase belongsTo Customer
+Purchase.belongsTo(Customer, { foreignKey: "customerId", as: "customer" });
+Customer.hasMany(Purchase, { foreignKey: "customerId", as: "purchases" });
+// ====================== CUSTOMER & BALANCE ======================
+
+// Customer and Balance
 Customer.hasMany(Balance, {
   foreignKey: "customerId",
-  as: "balances",  // optional alias
+  as: "balances",
   onDelete: "CASCADE",
 });
 Balance.belongsTo(Customer, {
@@ -50,183 +65,137 @@ Balance.belongsTo(Customer, {
   as: "customer",
 });
 
-// A car can have many operations
+// Balance and Item
+Balance.belongsTo(Item, { foreignKey: "itemId", onDelete: "CASCADE" });
+Item.hasMany(Balance, { foreignKey: "itemId", onDelete: "CASCADE" });
+
+// ====================== CAR MANAGEMENT ======================
+
+// Car and CarOperation
 Car.hasMany(CarOperation, {
   foreignKey: "carId",
   as: "operations",
   onDelete: "CASCADE",
 });
-// Each operation belongs to a car
 CarOperation.belongsTo(Car, {
   foreignKey: "carId",
   as: "car",
 });
 
-//  CarOperation and  User
+// CarOperation and User
 CarOperation.belongsTo(User, {
   foreignKey: "userId",
   onDelete: "CASCADE"
 });
-
 User.hasMany(CarOperation, {
   foreignKey: "userId",
   onDelete: "CASCADE"
 });
 
-// 🧩 1. User ↔ Sales
+// Car and Purchase
+Car.hasMany(Purchase, {
+  foreignKey: "carId",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+Purchase.belongsTo(Car, { foreignKey: "carId" });
+
+// ====================== SALES & LENDING ======================
+
+// User and Sales
 User.hasMany(Sales, {
   foreignKey: "userId",
   onDelete: "CASCADE",
 });
-
 Sales.belongsTo(User, {
   foreignKey: "userId",
 });
 
-// 🧩 2. Customer ↔ Sales
+// Customer and Sales
 Customer.hasMany(Sales, {
   foreignKey: "customerId",
   onDelete: "SET NULL",
 });
-
 Sales.belongsTo(Customer, {
   foreignKey: "customerId",
 });
 
-
-// 🧩 1. User ↔ Lending
+// User and Lending
 User.hasMany(Lending, {
   foreignKey: "userId",
   onDelete: "CASCADE",
 });
-
 Lending.belongsTo(User, {
   foreignKey: "userId",
 });
 
-
-// 🧩 2. Customer ↔ Lending
+// Customer and Lending
 Customer.hasMany(Lending, {
   foreignKey: "customerId",
   onDelete: "SET NULL",
 });
-
 Lending.belongsTo(Customer, {
   foreignKey: "customerId",
 });
 
-// One warehouse can have many users
-Warehouse.hasMany(User, {
-  foreignKey: "warehouseId",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
-
-// Each user belongs to one warehouse
-User.belongsTo(Warehouse, {
-  foreignKey: "warehouseId",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
-
-// Each sale belongs to one item
+// Item and Sales
+Item.hasMany(Sales, { foreignKey: "itemId", onDelete: "CASCADE" });
 Sales.belongsTo(Item, { foreignKey: "itemId", onDelete: "CASCADE" });
 
-// One item can appear in many sales
-Item.hasMany(Sales, { foreignKey: "itemId", onDelete: "CASCADE" });
-
-
-// Each lending record belongs to one item
+// Item and Lending
+Item.hasMany(Lending, { foreignKey: "itemId", onDelete: "CASCADE" });
 Lending.belongsTo(Item, { foreignKey: "itemId", onDelete: "CASCADE" });
 
-// One item can appear in many lendings
-Item.hasMany(Lending, { foreignKey: "itemId", onDelete: "CASCADE" });
-
+// Warehouse and Lending
+Warehouse.hasMany(Lending, { foreignKey: "warehouseId", onDelete: "CASCADE" });
 Lending.belongsTo(Warehouse, { foreignKey: "warehouseId", onDelete: "CASCADE" });
 
-// One warehouse can have many lendings
-Warehouse.hasMany(Lending, { foreignKey: "warehouseId", onDelete: "CASCADE" });
+// ====================== INVENTORY MANAGEMENT ======================
 
-// Each balance belongs to an item
-Balance.belongsTo(Item, { foreignKey: "itemId", onDelete: "CASCADE" });
-Item.hasMany(Balance, { foreignKey: "itemId", onDelete: "CASCADE" });
-
-// Each balance belongs to a customer
-Balance.belongsTo(Customer, { foreignKey: "customerId", onDelete: "CASCADE" });
-Customer.hasMany(Balance, { foreignKey: "customerId", onDelete: "CASCADE" });
-
-
-// Each purchase belongs to an item
-Purchase.belongsTo(Item, { foreignKey: "itemId", onDelete: "CASCADE" });
-Item.hasMany(Purchase, { foreignKey: "itemId", onDelete: "CASCADE" });
-
-// Each purchase belongs to a warehouse
-Purchase.belongsTo(Warehouse, { foreignKey: "warehouseId", onDelete: "CASCADE" });
-Warehouse.hasMany(Purchase, { foreignKey: "warehouseId", onDelete: "CASCADE" });
-
-
-// Item belongs to a Category
+// Category and Item
+Category.hasMany(Item, { foreignKey: "categoryId", onDelete: "CASCADE" });
 Item.belongsTo(Category, { foreignKey: "categoryId", onDelete: "CASCADE" });
-Category.hasMany(Item, { foreignKey: "categoryId", onDelete: "CASCADE" });
 
-// Item belongs to a Warehouse
+// Warehouse and Item
+Warehouse.hasMany(Item, { foreignKey: "warehouseId", onDelete: "CASCADE" });
 Item.belongsTo(Warehouse, { foreignKey: "warehouseId", onDelete: "CASCADE" });
-Warehouse.hasMany(Item, { foreignKey: "warehouseId", onDelete: "CASCADE" });
 
-// Store belongs to an Item
-Store.belongsTo(Item, { foreignKey: "itemId", onDelete: "CASCADE" });
-Item.hasMany(Store, { foreignKey: "itemId", onDelete: "CASCADE" });
-
-// Store belongs to a Warehouse
+// Warehouse and Store
+Warehouse.hasMany(Store, { foreignKey: "warehouseId", onDelete: "CASCADE" });
 Store.belongsTo(Warehouse, { foreignKey: "warehouseId", onDelete: "CASCADE" });
-Warehouse.hasMany(Store, { foreignKey: "warehouseId", onDelete: "CASCADE" });
 
-
-// ====================== INVENTORY RELATIONSHIPS ======================
-
-// CATEGORY ↔ ITEM
-Category.hasMany(Item, { foreignKey: "categoryId", onDelete: "CASCADE" });
-Item.belongsTo(Category, { foreignKey: "categoryId" });
-
-// WAREHOUSE ↔ ITEM
-Warehouse.hasMany(Item, { foreignKey: "warehouseId", onDelete: "CASCADE" });
-Item.belongsTo(Warehouse, { foreignKey: "warehouseId" });
-
-// WAREHOUSE ↔ STOCKOUT
-Warehouse.hasMany(Stockout, { foreignKey: "warehouseId", onDelete: "CASCADE" });
-Stockout.belongsTo(Warehouse, { foreignKey: "warehouseId" });
-
-// ITEM ↔ STOCKOUT
-Item.hasMany(Stockout, { foreignKey: "itemId", onDelete: "CASCADE" });
-Stockout.belongsTo(Item, { foreignKey: "itemId" });
-
-// WAREHOUSE ↔ STORE
-Warehouse.hasMany(Store, { foreignKey: "warehouseId", onDelete: "CASCADE" });
-Store.belongsTo(Warehouse, { foreignKey: "warehouseId" });
-
-// ITEM ↔ STORE
+// Item and Store
 Item.hasMany(Store, { foreignKey: "itemId", onDelete: "CASCADE" });
-Store.belongsTo(Item, { foreignKey: "itemId" });
+Store.belongsTo(Item, { foreignKey: "itemId", onDelete: "CASCADE" });
 
-// WAREHOUSE ↔ RETURN
+// Warehouse and Stockout
+Warehouse.hasMany(Stockout, { foreignKey: "warehouseId", onDelete: "CASCADE" });
+Stockout.belongsTo(Warehouse, { foreignKey: "warehouseId", as: "warehouse" });
+
+// Item and Stockout
+Item.hasMany(Stockout, { foreignKey: "itemId", onDelete: "CASCADE" });
+Stockout.belongsTo(Item, { foreignKey: "itemId", as: "item" });
+
+
+User.hasMany(Return, { foreignKey: "userId", as: "returns", onDelete: "CASCADE" });
+Return.belongsTo(User, { foreignKey: "userId", as: "user" });
+// Warehouse and Return
 Warehouse.hasMany(Return, { foreignKey: "warehouseId", onDelete: "CASCADE" });
-Return.belongsTo(Warehouse, { foreignKey: "warehouseId" });
+Return.belongsTo(Warehouse, { foreignKey: "warehouseId", as: "warehouse" });
 
-// ITEM ↔ RETURN
-Item.hasMany(Return, { foreignKey: "itemId", onDelete: "CASCADE" });
-Return.belongsTo(Item, { foreignKey: "itemId" });
+// Item and Return
+Item.hasMany(Return, { foreignKey: "itemId", onDelete: "CASCADE" }); 
+Return.belongsTo(Item, { foreignKey: "itemId", as: "item" }); 
 
-// ====================== PURCHASE RELATIONSHIPS ======================
+// ====================== PURCHASE MANAGEMENT ====================
 
-
-
-// ITEM ↔ PURCHASE
+// Item and Purchase
 Item.hasMany(Purchase, { foreignKey: "itemId", onDelete: "CASCADE" });
-Purchase.belongsTo(Item, { foreignKey: "itemId" });
+Purchase.belongsTo(Item, { foreignKey: "itemId", as: "item", onDelete: "CASCADE" });
 
-// WAREHOUSE ↔ PURCHASE
+// Warehouse and Purchase
 Warehouse.hasMany(Purchase, { foreignKey: "warehouseId", onDelete: "CASCADE" });
-Purchase.belongsTo(Warehouse, { foreignKey: "warehouseId" });
+Purchase.belongsTo(Warehouse, { foreignKey: "warehouseId", as: "warehouse", onDelete: "CASCADE" });
 
 // ====================== EXPORT ======================
 module.exports = {
@@ -237,5 +206,15 @@ module.exports = {
   Store,
   Return,
   Purchase,
-  sequelize, User, Role, Permission, Customer, Balance, Car, CarOperation, Sales, Lending, Expense
+  sequelize, 
+  User, 
+  Role, 
+  Permission, 
+  Customer, 
+  Balance, 
+  Car, 
+  CarOperation, 
+  Sales, 
+  Lending, 
+  Expense
 };

@@ -7,6 +7,7 @@ const { sendEmail } = require("../utils/notificationService"); // Hypothetical n
 const createPurchase = async (req, res) => {
   try {
     const {
+      customerId, // ✅ include this
       itemId,
       warehouseId,
       itemAmount,
@@ -23,21 +24,25 @@ const createPurchase = async (req, res) => {
     } = req.body;
 
     // Basic validations
-    if (!itemId || !warehouseId || !itemAmount || !unitPrice) {
+    if (!customerId || !itemId || !warehouseId || !itemAmount || !unitPrice) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
     // Check if related models exist
-    const item = await Item.findByPk(itemId);
-    const warehouse = await Warehouse.findByPk(warehouseId);
+    const [customer, item, warehouse] = await Promise.all([
+      Customer.findByPk(customerId),
+      Item.findByPk(itemId),
+      Warehouse.findByPk(warehouseId),
+    ]);
 
-    if (!item || !warehouse) {
-      return res.status(404).json({ message: "Item or Warehouse not found" });
+    if (!customer || !item || !warehouse) {
+      return res.status(404).json({ message: "Customer, Item or Warehouse not found" });
     }
 
     const totalPrice = itemAmount * unitPrice;
 
     const newPurchase = await Purchase.create({
+      customerId, // ✅ include this
       itemId,
       warehouseId,
       itemAmount,
@@ -54,53 +59,88 @@ const createPurchase = async (req, res) => {
       vat
     });
 
-    res.status(201).json({ message: "Purchase created successfully", data: newPurchase });
+    res.status(201).json({
+      message: "Purchase created successfully",
+      data: newPurchase,
+    });
   } catch (error) {
     console.error("Error creating purchase:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
-// ✅ READ ALL PURCHASES (optional filters)
+
 const getPurchases = async (req, res) => {
   try {
-    const { itemId, warehouseId, status, search } = req.query;
+    const { customerId, itemId, warehouseId, status, search, page, limit } = req.query;
     const where = {};
 
+    // Optional filters
+    if (customerId) where.customerId = customerId;
     if (itemId) where.itemId = itemId;
     if (warehouseId) where.warehouseId = warehouseId;
     if (status) where.status = status;
 
-    const purchases = await Purchase.findAll({
+
+    // Pagination
+    const pageNumber = parseInt(page) || 1;
+    const pageSize = parseInt(limit) || 10;
+    const offset = (pageNumber - 1) * pageSize;
+
+    // Search by Customer or Item name
+    if (search) {
+      where[Op.or] = [
+        { "$customer.name$": { [Op.like]: `%${search}%` } },
+        { "$item.name$": { [Op.like]: `%${search}%` } },
+      ];
+    }
+
+    // Fetch purchases with associations
+    const { rows: purchases, count: total } = await Purchase.findAndCountAll({
       where,
       include: [
-        { model: Customer, attributes: ["id", "name"] },
-        { model: Item, attributes: ["id", "name"] },
-        { model: Warehouse, attributes: ["id", "name"] },
+        { model: Customer, as: "customer", attributes: ["id", "name"] },
+        { model: Item, as: "item", attributes: ["id", "name"] },
+        { model: Warehouse, as: "warehouse", attributes: ["id", "name"] },
       ],
       order: [["createdAt", "DESC"]],
+      limit: pageSize,
+      offset,
     });
 
-    res.status(200).json(purchases);
+    res.status(200).json({
+      page: pageNumber,
+      totalPages: Math.ceil(total / pageSize),
+      total,
+      data: purchases,
+    });
   } catch (error) {
     console.error("Error fetching purchases:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
+module.exports = { getPurchases };
+
+
+
+
 // ✅ READ SINGLE PURCHASE
 const getPurchaseById = async (req, res) => {
   try {
     const { id } = req.params;
+
     const purchase = await Purchase.findByPk(id, {
       include: [
-        { model: Customer, attributes: ["id", "name"] },
-        { model: Item, attributes: ["id", "name"] },
-        { model: Warehouse, attributes: ["id", "name"] },
+        { model: Customer, as: "customer", attributes: ["id", "name"] },
+        { model: Item, as: "item", attributes: ["id", "name"] },
+        { model: Warehouse, as: "warehouse", attributes: ["id", "name"] },
       ],
     });
 
-    if (!purchase) return res.status(404).json({ message: "Purchase not found" });
+    if (!purchase) {
+      return res.status(404).json({ message: "Purchase not found" });
+    }
 
     res.status(200).json(purchase);
   } catch (error) {

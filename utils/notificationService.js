@@ -9,6 +9,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+
 // Send email notification
 const sendEmail = async ({ to, subject, text }) => {
   try {

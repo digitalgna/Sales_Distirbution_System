@@ -2,21 +2,17 @@ const express = require("express");
 const router = express.Router();
 const returnController = require("../controllers/returnController");
 
-// CRUD routes
-router.post("/", returnController.createReturn);
-router.get("/", returnController.getReturns);
-router.get("/:id", returnController.getReturnById);
-router.put("/:id", returnController.updateReturn);
-router.delete("/:id", returnController.deleteReturn);
-// Return processing routes
-router.post('/process', returnController.processReturn);
-router.post('/validate', returnController.validateReturn);
+// CRUD Routes
+router.post("/", returnController.createReturn); // Create a new return
+router.get("/", returnController.getAllReturns); // Get all returns
+router.get("/:id", returnController.getReturnById); // Get single return
+router.put("/:id", returnController.updateReturn); // Update a return
+router.delete("/:id", returnController.deleteReturn); // Delete a return
 
-// Return analytics and reporting routes
-router.get('/analytics/summary', returnController.generateReturnSummary);
-router.get('/history', returnController.getReturnHistory);
+// Additional functionalities
+router.patch("/:id/status", returnController.changeReturnStatus); // Approve or reject a return
 
-// Return notification routes
-router.post('/notify-status', returnController.notifyReturnStatusChange);
+// Reporting
+router.get("/report/summary", returnController.getReturnReport); // Generate return report
 
 module.exports = router;

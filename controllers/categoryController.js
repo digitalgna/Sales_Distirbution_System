@@ -1,4 +1,4 @@
-const { Op } = require("sequelize");
+const { Op  } = require("sequelize");
 const { Category, Item, Store, Warehouse } = require("../models/index");
 const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 
@@ -19,6 +19,7 @@ const createCategory = async (req, res) => {
   }
 };
 
+// ✅ READ ALL CATEGORIES 
 const getCategories = async (req, res) => {
   try {
     const categories = await Category.findAll({ order: [["createdAt", "DESC"]] });
@@ -58,22 +59,93 @@ const updateCategory = async (req, res) => {
   }
 };
 
-// ✅ DELETE CATEGORY
-const deleteCategory = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const category = await Category.findByPk(id);
-    if (!category) return res.status(404).json({ message: "Category not found" });
-
-    await category.destroy();
-    res.status(200).json({ message: "Category deleted successfully" });
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
 
 
 //== Additional Features Implementations ==========
+
+
+
+// /**
+//  * 2️⃣ Get item count per category
+//  */
+const getCategoryItemCount = async (req, res) => {
+  try {
+    const categories = await Category.findAll({
+      attributes: [
+        "id",
+        "name",
+        [fn("COUNT", col("Items.id")), "itemCount"],
+      ],
+      include: [
+        { model: Item, attributes: [] } // Only for counting
+      ],
+      group: ["Category.id"],
+    });
+
+    res.json({ message: "Item count per category fetched", data: categories });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch item count", error: error.message });
+  }
+};
+
+/**
+ * 3️⃣ Category reporting (items, sales, returns)
+ */
+const getCategoryReport = async (req, res) => {
+  try {
+    const categories = await Category.findAll({
+      attributes: ["id", "name"],
+      include: [
+        {
+          model: Item,
+          attributes: ["id", "name"],
+          include: [
+            {
+              model: Sales,
+              attributes: [[fn("SUM", col("Sales.quantity")), "totalSales"]],
+            },
+            {
+              model: Return,
+              attributes: [[fn("SUM", col("Returns.returnQuantity")), "totalReturns"]],
+            },
+          ],
+        },
+      ],
+      group: ["Category.id", "Items.id", "Items->Sales.id", "Items->Returns.id"],
+    });
+
+    res.json({ message: "Category report fetched", data: categories });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch category report", error: error.message });
+  }
+};
+
+/**
+ * 4️⃣ Delete category with validation
+ *    - Prevent deletion if category has items
+ */
+const deleteCategory = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const itemCount = await Item.count({ where: { categoryId: id } });
+    if (itemCount > 0) {
+      return res.status(400).json({
+        message: "Cannot delete category. Items exist under this category.",
+      });
+    }
+
+    const deleted = await Category.destroy({ where: { id } });
+    if (deleted) {
+      res.json({ message: "Category deleted successfully" });
+    } else {
+      res.status(404).json({ message: "Category not found" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete category", error: error.message });
+  }
+};
+
 
 // Analyze item distribution across categories
 const analyzeCategoryItemDistribution = async (req, res) => {
@@ -118,33 +190,8 @@ const analyzeCategoryItemDistribution = async (req, res) => {
   }
 };
 
-// Validate category usage before deletion
-const validateCategoryUsage = async (req, res) => {
-  try {
-    const { categoryId } = req.params;
 
-    // Validate category
-    const category = await Category.findByPk(categoryId);
-    if (!category) {
-      return res.status(404).json({ error: "Category not found" });
-    }
 
-    // Check if category is associated with any items
-    const itemCount = await Item.count({ where: { categoryId } });
-    if (itemCount > 0) {
-      return res.status(400).json({
-        error: `Cannot delete category '${category.name}' as it is associated with ${itemCount} item(s)`,
-      });
-    }
-
-    return res.status(200).json({
-      message: `Category '${category.name}' is safe to delete (no associated items)`,
-    });
-  } catch (error) {
-    console.error("Error validating category usage:", error);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-};
 
 // Generate category inventory report
 const generateCategoryInventoryReport = async (req, res) => {
@@ -212,94 +259,7 @@ const generateCategoryInventoryReport = async (req, res) => {
   }
 };
 
-// Merge categories (move items to a target category)
-const mergeCategories = async (req, res) => {
-  try {
-    const { sourceCategoryId, targetCategoryId } = req.body;
 
-    // Validate inputs
-    if (!sourceCategoryId || !targetCategoryId) {
-      return res.status(400).json({ error: "sourceCategoryId and targetCategoryId are required" });
-    }
-    if (sourceCategoryId === targetCategoryId) {
-      return res.status(400).json({ error: "Source and target categories must be different" });
-    }
-
-    // Verify categories exist
-    const sourceCategory = await Category.findByPk(sourceCategoryId);
-    const targetCategory = await Category.findByPk(targetCategoryId);
-    if (!sourceCategory || !targetCategory) {
-      return res.status(404).json({ error: "Source or target category not found" });
-    }
-
-    // Move items to target category
-    await Item.update(
-      { categoryId: targetCategoryId },
-      { where: { categoryId: sourceCategoryId } }
-    );
-
-    // Optionally delete source category (if empty)
-    const itemCount = await Item.count({ where: { categoryId: sourceCategoryId } });
-    if (itemCount === 0) {
-      await sourceCategory.destroy();
-    }
-
-    return res.status(200).json({
-      message: `Items moved from category '${sourceCategory.name}' to '${targetCategory.name}'`,
-      deletedSource: itemCount === 0,
-    });
-  } catch (error) {
-    console.error("Error merging categories:", error);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// Notify users of category changes
-const notifyCategoryChanges = async (req, res) => {
-  try {
-    const { categoryId, message } = req.body;
-
-    // Validate inputs
-    if (!categoryId || !message) {
-      return res.status(400).json({ error: "categoryId and message are required" });
-    }
-
-    // Verify category exists
-    const category = await Category.findByPk(categoryId);
-    if (!category) {
-      return res.status(404).json({ error: "Category not found" });
-    }
-
-    // Find users associated with warehouses containing items in this category
-    const items = await Item.findAll({
-      where: { categoryId },
-      include: [{ model: Store, attributes: ["warehouseId"] }],
-    });
-
-    const warehouseIds = [...new Set(items.flatMap(item => item.Stores.map(store => store.warehouseId)))];
-    const users = await User.findAll({
-      where: { warehouseId: { [Op.in]: warehouseIds } },
-      attributes: ["email"],
-    });
-
-    // Send notifications
-    for (const user of users) {
-      await sendEmail({
-        to: user.email,
-        subject: `Update for Category: ${category.name}`,
-        text: `Category '${category.name}' update: ${message}`,
-      });
-    }
-
-    return res.status(200).json({
-      message: `Notifications sent for category '${category.name}'`,
-      notifiedUsers: users.length,
-    });
-  } catch (error) {
-    console.error("Error notifying category changes:", error);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-};
 
 module.exports = {
   createCategory,
@@ -308,8 +268,7 @@ module.exports = {
   updateCategory,
   deleteCategory,
   analyzeCategoryItemDistribution,
-  validateCategoryUsage,
   generateCategoryInventoryReport,
-  mergeCategories,
-  notifyCategoryChanges,
+  getCategoryItemCount,
+  getCategoryReport
 };
