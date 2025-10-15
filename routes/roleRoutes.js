@@ -8,4 +8,7 @@ router.get("/:id", roleController.getRoleById);
 router.put("/:id", roleController.updateRole);
 router.delete("/:id", roleController.deleteRole);
 
+router.get("/permission/:permissionId", roleController.getRolesByPermission);
+
+
 module.exports = router;

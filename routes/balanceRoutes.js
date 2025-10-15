@@ -9,4 +9,7 @@ router.post("/", balanceController.createBalance);
 router.put("/:id", balanceController.updateBalance);
 router.delete("/:id", balanceController.deleteBalance);
 
+router.get("/customer/:customerId", balanceController.getAllBalancesByCustomer);
+router.get("/item/:itemId", balanceController.getAllBalancesByItem);
+
 module.exports = router;

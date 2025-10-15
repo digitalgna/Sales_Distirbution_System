@@ -12,5 +12,8 @@ router.delete('/:id', lendingController.deleteLending);
 router.get('/user/:userId', lendingController.getLendingsByUser);
 router.get('/customer/:customerId', lendingController.getLendingsByCustomer);
 router.get('/warehouse/:warehouseId', lendingController.getLendingsByWarehouse);
+router.get('/item/:itemId', lendingController.getLendingsByItem);
+router.post("/report", lendingController.getLendingReportByDateRange);
+
 
 module.exports = router;

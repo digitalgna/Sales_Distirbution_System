@@ -13,6 +13,7 @@ const Car = sequelize.define("Car", {
   },
   carPlate: {
     type: DataTypes.STRING,
+    unique: true,
     allowNull: false,
   },
   carModel: {

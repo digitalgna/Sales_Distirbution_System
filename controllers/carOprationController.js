@@ -148,7 +148,8 @@ exports.getOperationsByUser = async (req, res) => {
     const { userId } = req.params;
     const operations = await CarOperation.findAll({
       where: { userId },
-      include: [ { model: Car } ]
+      include: [ { model: Car, as: "car", attributes: ['id', 'carName', 'carPlate'] } ,
+                 { model: User, attributes: ['id', 'fullName'] } ],
     });
     res.status(200).json(operations);
   } catch (error) {
@@ -162,7 +163,7 @@ exports.getOperationsByActionType = async (req, res) => {
     const { actionType } = req.params;
     const operations = await CarOperation.findAll({
       where: { actionType },
-      include: [ { model: Car }, { model: User } ]
+      include: [ { model: Car, as: "car", attributes: ['id', 'carName', 'carPlate'] }, { model: User, attributes: ['id', 'fullName'] } ]
     });
     res.status(200).json(operations);
   } catch (error) {
@@ -177,7 +178,8 @@ exports.getLatestOperationByCar = async (req, res) => {
     const operation = await CarOperation.findOne({
       where: { carId },
       order: [["createdAt", "DESC"]],
-      include: [ { model: User } ]
+      include: [ { model: User, attributes: ['id', 'fullName'] },
+                 { model: Car, as: "car", attributes: ['id', 'carName', 'carPlate'] } ]
     });
     if (!operation) return res.status(404).json({ message: "No operations found for this car" });
     res.status(200).json(operation);

@@ -2,6 +2,47 @@ const Lending = require('../models/lending');
 const User = require('../models/user');
 const Customer = require('../models/customer');
 const Item = require('../models/item');
+const { Warehouse } = require('../models');
+
+const { Op } = require("sequelize");
+
+exports.createLending = async (req, res) => {
+  try {
+    const { userId, customerId, itemId, quantity, warehouseId, lendingDate } = req.body;
+
+    if (!userId || !itemId || !quantity || !warehouseId || !lendingDate) {
+      return res.status(400).json({
+        message: "userId, itemId, quantity, warehouseId, and lendingDate are required."
+      });
+    }
+
+    const item = await Item.findByPk(itemId);
+    if (!item) {
+      return res.status(404).json({ message: "Item not found" });
+    }
+
+    await item.update({ quantity: item.quantity - quantity });
+
+    const lending = await Lending.create({
+      userId,
+      customerId,
+      itemId,
+      quantity,
+      warehouseId,
+      lendingDate
+    });
+
+    res.status(201).json({
+      message: "Lending created successfully and item stock updated",
+      lending
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "Failed to create lending",
+      error: err.message
+    });
+  }
+};
 
 exports.getAllLendings = async (req, res) => {
   try {
@@ -25,15 +66,6 @@ exports.getLendingById = async (req, res) => {
     res.json(lending);
   } catch (err) {
     res.status(500).json({ error: err.message });
-  }
-};
-
-exports.createLending = async (req, res) => {
-  try {
-    const lending = await Lending.create(req.body);
-    res.status(201).json(lending);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
   }
 };
 
@@ -72,18 +104,88 @@ exports.getLendingsByUser = async (req, res) => {
 
 exports.getLendingsByCustomer = async (req, res) => {
   try {
-    const lendings = await Lending.findAll({ where: { customerId: req.params.customerId } });
+    const customerId = Number(req.params.customerId);
+    const lendings = await Lending.findAll({
+      where: { customerId },
+      include: [
+        { model: User, attributes: ["id", "fullName"] },
+        { model: Item, attributes: ["id", "name", "unitPrice"] },
+        { model: Customer, attributes: ["id", "name"] },
+        { model: Item, attributes: ["id", "name"] },
+      ],
+    });
+    res.status(200).json(lendings);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch lendings by customer", error: error.message });
+  }
+};
+
+exports.getLendingsByWarehouse = async (req, res) => {
+  try {
+    const lendings = await Lending.findAll({ where: { warehouseId: req.params.warehouseId }, 
+          include: [
+        { model: User, attributes: ["id", "fullName"] },
+        { model: Item, attributes: ["id", "name", "unitPrice"] },
+        { model: Customer, attributes: ["id", "name"] },
+        { model: Warehouse, attributes: ["id", "name"]},
+      ],
+    });
     res.json(lendings);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-exports.getLendingsByWarehouse = async (req, res) => {
+exports.getLendingsByItem = async (req, res) => {
   try {
-    const lendings = await Lending.findAll({ where: { warehouseId: req.params.warehouseId } });
-    res.json(lendings);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    const itemId = Number(req.params.itemId);
+    const lendings = await Lending.findAll({
+      where: { itemId },
+      include: [
+        { model: User, attributes: ["id", "fullName"] },
+        { model: Customer, attributes: ["id", "name"] },
+        { model: Item, attributes: ["id", "name", "unitPrice"] },
+        { model: Warehouse, attributes: ["id", "name"]},
+      ],
+    });
+    res.status(200).json(lendings);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch lendings by item", error: error.message });
+  }
+};
+
+
+exports.getLendingReportByDateRange = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.body;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ message: "Please provide both startDate and endDate in request body." });
+    }
+
+    const lendings = await Lending.findAll({
+      where: {
+        lendingDate: {
+          [Op.between]: [new Date(startDate), new Date(endDate)]
+        }
+      },
+      include: [
+        { model: User, attributes: ["id", "fullName"] },
+        { model: Customer, attributes: ["id", "name"] },
+        { model: Item, attributes: ["id", "name"] },
+        { model: Warehouse, attributes: ["id", "name"] }
+      ],
+      order: [["lendingDate", "ASC"]],
+    });
+
+    const totalQuantity = lendings.reduce((sum, lend) => sum + parseInt(lend.quantity || 0), 0);
+
+    res.status(200).json({
+      totalQuantity,
+      count: lendings.length,
+      lendings,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to generate lending report", error: error.message });
   }
 };

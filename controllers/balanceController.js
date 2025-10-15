@@ -78,3 +78,35 @@ exports.deleteBalance = async (req, res) => {
     res.status(500).json({ message: "Failed to delete balance", error: error.message });
   }
 };
+
+exports.getAllBalancesByCustomer = async (req, res) => {
+  try {
+    const balances = await Balance.findAll({
+      include: [
+        { model: Customer, attributes: ["id", "name"] },
+        { model: Item, attributes: ["id", "name"] }
+      ],
+      order: [["date", "ASC"]]
+    });
+
+    res.status(200).json(balances);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch balances", error: err.message });
+  }
+};
+
+exports.getAllBalancesByItem = async (req, res) => {
+  try {
+    const balances = await Balance.findAll({
+      include: [
+        { model: Item, attributes: ["id", "name"] },
+        { model: Customer, attributes: ["id", "name"] }
+      ],
+      order: [["date", "ASC"]]
+    });
+
+    res.status(200).json(balances);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch balances", error: err.message });
+  }
+};

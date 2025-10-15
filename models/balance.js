@@ -10,7 +10,7 @@ const Balance = sequelize.define("Balance", {
     primaryKey: true,
   },
   amount: {
-    type: DataTypes.DECIMAL(10,2),
+    type: DataTypes.INTEGER,
     allowNull: false,
   },
   customerId: {
@@ -24,7 +24,7 @@ const Balance = sequelize.define("Balance", {
   },
   itemId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
     references: {
         model: Item,
         key: 'id'

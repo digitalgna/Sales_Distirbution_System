@@ -3,6 +3,7 @@ const sequelize = require("../config/db.js");
 const User = require("./user.js")
 const Customer = require("./customer.js");
 const Item = require("./item.js");
+const Warehouse = require("./wharehouse.js");
 
 const Sales = sequelize.define("Sales", {
   id: {
@@ -72,7 +73,17 @@ const Sales = sequelize.define("Sales", {
   description: {
     type: DataTypes.STRING,
     allowNull: true
+  },
+  warehouseId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+        model: Warehouse,
+        key: 'id'
+    },
+    onDelete: 'CASCADE'
   }
+
 
 });
 

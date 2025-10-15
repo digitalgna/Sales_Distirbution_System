@@ -160,3 +160,47 @@ exports.deleteRole = async (req, res) => {
     res.status(500).json({ message: "Server Error", error });
   }
 };
+
+// GET roles by permission ID
+exports.getRolesByPermission = async (req, res) => {
+  const { permissionId } = req.params;
+
+  try {
+    const permission = await Permission.findByPk(permissionId);
+    if (!permission)
+      return res.status(404).json({ message: "Permission not found" });
+
+    const roles = await Role.findAll({
+      where: { permissionId },
+      include: {
+        model: Permission,
+        attributes: ["id", "module", "actions"],
+      },
+      attributes: ["id", "name", "permissionId"],
+    });
+
+    if (!roles.length)
+      return res.status(404).json({ message: "No roles found for this permission" });
+
+    const formatted = roles.map(r => ({
+      id: r.id,
+      name: r.name,
+      permissionId: r.permissionId,
+      permission: r.Permission
+        ? {
+            id: r.Permission.id,
+            module: r.Permission.module,
+            actions: Array.isArray(r.Permission.actions)
+              ? r.Permission.actions
+              : JSON.parse(r.Permission.actions),
+          }
+        : null,
+    }));
+
+    res.status(200).json(formatted);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server Error", error });
+  }
+};
+

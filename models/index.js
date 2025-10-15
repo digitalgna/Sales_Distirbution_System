@@ -130,6 +130,10 @@ User.belongsTo(Warehouse, {
   onUpdate: "CASCADE",
 });
 
+//sales belong to warehouse
+Sales.belongsTo(Warehouse, { foreignKey: "warehouseId", onDelete: "CASCADE" });
+Warehouse.hasMany(Sales, { foreignKey: "warehouseId", onDelete: "CASCADE" });
+
 // Each sale belongs to one item
 Sales.belongsTo(Item, { foreignKey: "itemId", onDelete: "CASCADE" });
 
