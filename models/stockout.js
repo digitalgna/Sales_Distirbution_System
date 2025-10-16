@@ -7,6 +7,7 @@ const Stockout = sequelize.define("Stockout", {
   amount: { type: DataTypes.INTEGER, allowNull: false },
   sponsor: DataTypes.INTEGER,
   bonus: DataTypes.INTEGER,
+  stockoutDate: DataTypes.DATE,
   salesId: {
     type: DataTypes.INTEGER,
     allowNull: false,

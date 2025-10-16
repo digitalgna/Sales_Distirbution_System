@@ -1,62 +1,14 @@
 const { Op } = require("sequelize");
-const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 const sequelize = require("../config/db");
-const Item = require("./item.js");
-const Customer = require("./customer.js");
-const Warehouse = require("./wharehouse.js");
-const Store = require("./store.js");
-const Balance = require("./balance.js");
-const Purchase = require("./purchase.js");
+const Item = require("../models/item.js");
+const Customer = require("../models/customer.js");
+const Warehouse = require("../models/wharehouse.js");
+const Store = require("../models/store.js");
+const Balance = require("../models/balance.js");
+const Purchase = require("../models/purchase.js");
 
 // Create functionality
-exports.createPurchase = async (data) => {
-  const t = await sequelize.transaction();
-  try {
-    // Set default status to 'pending' if not provided
-    if (!data.status) data.status = 'pending';
-    
-    // Validate required fields
-    if (!data.itemId || !data.warehouseId || !data.customerId || !data.itemAmount || !data.totalPrice) {
-      throw new Error('Missing required fields: itemId, warehouseId, customerId, itemAmount, or totalPrice');
-    }
 
-    // Create the purchase
-    const purchase = await Purchase.create(data, { transaction: t });
-
-    // If status is 'completed', update related tables
-    if (purchase.status === 'completed') {
-      // Update Item quantity
-      const item = await Item.findByPk(purchase.itemId, { transaction: t });
-      if (!item) throw new Error('Item not found');
-      item.quantity = (item.quantity || 0) + purchase.itemAmount;
-      await item.save({ transaction: t });
-
-      // Update Store quantity
-      const [store, created] = await Store.findOrCreate({
-        where: { itemId: purchase.itemId, warehouseId: purchase.warehouseId },
-        defaults: { quantity: 0 },
-        transaction: t
-      });
-      store.quantity += purchase.itemAmount;
-      await store.save({ transaction: t });
-
-      // Update Balance (decrease)
-      const balance = await Balance.findOne({ 
-        where: { customerId: purchase.customerId }, 
-        transaction: t 
-      });
-      if (!balance) throw new Error('Balance not found for customer');
-      balance.amount = (parseFloat(balance.amount) || 0) - parseFloat(purchase.totalPrice);
-      await balance.save({ transaction: t });
-    }
-
-    await t.commit();
-    return purchase;
-  } catch (error) {
-    await t.rollback();
-    throw error;
-  }
-}
 
 // Update functionality
 exports.updatePurchase = async (id, data) => {
@@ -218,51 +170,21 @@ exports.updatePurchase = async (id, data) => {
   }
 }
 
-module.exports = { Purchase, createPurchase, updatePurchase };
-
 
 exports.getPurchases = async (req, res) => {
   try {
-    const { customerId, itemId, warehouseId, status, search, page, limit } = req.query;
-    const where = {};
-
-    // Optional filters
-    if (customerId) where.customerId = customerId;
-    if (itemId) where.itemId = itemId;
-    if (warehouseId) where.warehouseId = warehouseId;
-    if (status) where.status = status;
-
-
-    // Pagination
-    const pageNumber = parseInt(page) || 1;
-    const pageSize = parseInt(limit) || 10;
-    const offset = (pageNumber - 1) * pageSize;
-
-    // Search by Customer or Item name
-    if (search) {
-      where[Op.or] = [
-        { "$customer.name$": { [Op.like]: `%${search}%` } },
-        { "$item.name$": { [Op.like]: `%${search}%` } },
-      ];
-    }
-
-    // Fetch purchases with associations
-    const { rows: purchases, count: total } = await Purchase.findAndCountAll({
-      where,
+    // Fetch all purchases with associations
+    const purchases = await Purchase.findAll({
       include: [
         { model: Customer, as: "customer", attributes: ["id", "name"] },
         { model: Item, as: "item", attributes: ["id", "name"] },
         { model: Warehouse, as: "warehouse", attributes: ["id", "name"] },
       ],
       order: [["createdAt", "DESC"]],
-      limit: pageSize,
-      offset,
     });
 
     res.status(200).json({
-      page: pageNumber,
-      totalPages: Math.ceil(total / pageSize),
-      total,
+      total: purchases.length,
       data: purchases,
     });
   } catch (error) {
@@ -270,8 +192,6 @@ exports.getPurchases = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
-
 
 // ✅ READ SINGLE PURCHASE
 exports.getPurchaseById = async (req, res) => {
@@ -339,185 +259,83 @@ exports.deletePurchase = async (req, res) => {
 
 // additional functionalities 
 
-// Update stock after purchase
-exports.updateStockAfterPurchase = async (req, res) => {
+// Get purchases by customerId
+exports.getPurchasesByCustomer = async (req, res) => {
   try {
-    const { purchaseId } = req.params;
+    const { customerId } = req.params;
+    const purchases = await Purchase.findAll({ where: { customerId } });
 
-    // Validate purchase
-    const purchase = await Purchase.findByPk(purchaseId, {
-      include: [{ model: Item }, { model: Warehouse }],
-    });
-    if (!purchase) {
-      return res.status(404).json({ error: "Purchase not found" });
+    if (!purchases.length) {
+      return res.status(404).json({ message: "No purchases found for this customer" });
     }
 
-    // Find or create store record
-    let store = await Store.findOne({
-      where: { itemId: purchase.itemId, warehouseId: purchase.warehouseId },
-    });
-    if (!store) {
-      store = await Store.create({
-        itemId: purchase.itemId,
-        warehouseId: purchase.warehouseId,
-        quantity: 0,
-      });
-    }
-
-    // Update stock quantity
-    store.quantity += purchase.itemAmount;
-    await store.save();
-
-    // Update Item's totalPrice
-    const item = purchase.Item;
-    item.totalPrice = (item.quantity + purchase.itemAmount) * item.unitPrice;
-    await item.save();
-
-    return res.status(200).json({
-      message: `Stock updated for item '${item.name}' in warehouse '${purchase.Warehouse.name}'`,
-      store: { itemId: store.itemId, warehouseId: store.warehouseId, quantity: store.quantity },
-    });
+    res.status(200).json(purchases);
   } catch (error) {
-    console.error("Error updating stock after purchase:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
-// Calculate and validate taxes (VAT, excise tax, withholding)
-exports.calculatePurchaseTaxes = async (req, res) => {
+// Get purchases by itemId
+exports.getPurchasesByItem = async (req, res) => {
   try {
-    const { purchaseId } = req.params;
+    const { itemId } = req.params;
+    const purchases = await Purchase.findAll({ where: { itemId } });
 
-    // Validate purchase
-    const purchase = await Purchase.findByPk(purchaseId);
-    if (!purchase) {
-      return res.status(404).json({ error: "Purchase not found" });
+    if (!purchases.length) {
+      return res.status(404).json({ message: "No purchases found for this item" });
     }
 
-    // Validate required fields
-    if (!purchase.unitPrice || !purchase.itemAmount) {
-      return res.status(400).json({ error: "unitPrice and itemAmount are required for tax calculation" });
+    res.status(200).json(purchases);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Get purchases by warehouseId
+exports.getPurchasesByWarehouse = async (req, res) => {
+  try {
+    const { warehouseId } = req.params;
+    const purchases = await Purchase.findAll({ where: { warehouseId } });
+
+    if (!purchases.length) {
+      return res.status(404).json({ message: "No purchases found for this warehouse" });
     }
 
-    // Tax rates (configurable)
-    const VAT_RATE = 0.16; // 16% VAT
-    const EXCISE_TAX_RATE = 0.05; // 5% excise tax
-    const WITHHOLDING_TAX_RATE = 0.02; // 2% withholding tax
+    res.status(200).json(purchases);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+//reporting by date range
+exports.getPurchaseReportByDate = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
 
-    // Calculate taxes
-    const subtotal = purchase.unitPrice * purchase.itemAmount;
-    const vat = subtotal * VAT_RATE;
-    const unitExciseTax = purchase.unitPrice * EXCISE_TAX_RATE;
-    const withholdingAmount = subtotal * WITHHOLDING_TAX_RATE;
-    const totalPrice = (subtotal + vat + (unitExciseTax * purchase.itemAmount)).toFixed(2);
+    // Validate input
+    if (!startDate || !endDate) {
+      return res.status(400).json({ message: "Please provide startDate and endDate" });
+    }
 
-    // Update purchase with calculated values
-    await purchase.update({
-      vat,
-      unitExciseTax,
-      withholdingAmount,
-      totalPrice,
-    });
-
-    return res.status(200).json({
-      message: "Taxes calculated and updated for purchase",
-      purchase: {
-        id: purchase.id,
-        itemAmount: purchase.itemAmount,
-        unitPrice: purchase.unitPrice,
-        vat,
-        unitExciseTax,
-        withholdingAmount,
-        totalPrice,
+    // Query purchases within date range
+    const purchases = await Purchase.findAll({
+      where: {
+        date: {
+          [Op.between]: [new Date(startDate), new Date(endDate)],
+        },
       },
+      order: [["date", "DESC"]],
+    });
+
+    if (!purchases.length) {
+      return res.status(404).json({ message: "No purchases found in this date range" });
+    }
+
+    res.status(200).json({
+      message: "Purchase report generated successfully",
+      count: purchases.length,
+      data: purchases,
     });
   } catch (error) {
-    console.error("Error calculating purchase taxes:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
-
-// Track purchase status and notify users
-exports.trackPurchaseStatus = async (req, res) => {
-  try {
-    const { purchaseId, newStatus } = req.body;
-
-    // Validate inputs
-    if (!purchaseId || !newStatus) {
-      return res.status(400).json({ error: "purchaseId and newStatus are required" });
-    }
-
-    // Validate purchase
-    const purchase = await Purchase.findByPk(purchaseId, {
-      include: [{ model: Customer, as: "customer" }, { model: Warehouse }],
-    });
-    if (!purchase) {
-      return res.status(404).json({ error: "Purchase not found" });
-    }
-
-    // Update status
-    await purchase.update({ status: newStatus });
-
-    // Notify relevant users (e.g., warehouse managers)
-    const users = await User.findAll({
-      where: { warehouseId: purchase.warehouseId },
-      attributes: ["email"],
-    });
-
-    for (const user of users) {
-      await sendEmail({
-        to: user.email,
-        subject: `Purchase Status Update: ${purchase.id}`,
-        text: `Purchase for item ${purchase.itemId} from supplier ${purchase.customer.name} in warehouse ${purchase.Warehouse.name} updated to status: ${newStatus}`,
-      });
-    }
-
-    return res.status(200).json({
-      message: `Purchase status updated to '${newStatus}' and users notified`,
-      purchase: { id: purchase.id, status: purchase.status },
-    });
-  } catch (error) {
-    console.error("Error tracking purchase status:", error);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// Validate purchase before creation
-exports.validatePurchase = async (req, res) => {
-  try {
-    const { itemId, warehouseId, itemAmount, unitPrice } = req.body;
-
-    // Validate required fields
-    if (!itemId || !warehouseId || !itemAmount || itemAmount <= 0 || !unitPrice) {
-      return res.status(400).json({ error: "itemId, warehouseId, itemAmount, and unitPrice are required" });
-    }
-
-
-    // Validate item
-    const item = await Item.findByPk(itemId);
-    if (!item) {
-      return res.status(404).json({ error: "Item not found" });
-    }
-
-    // Validate warehouse
-    const warehouse = await Warehouse.findByPk(warehouseId);
-    if (!warehouse) {
-      return res.status(404).json({ error: "Warehouse not found" });
-    }
-
-    // Validate unitPrice alignment with item
-    if (unitPrice !== item.unitPrice) {
-      return res.status(400).json({ error: `Provided unitPrice (${unitPrice}) does not match item's unitPrice (${item.unitPrice})` });
-    }
-
-    return res.status(200).json({
-      message: "Purchase is valid and can be created",
-      validated: { itemId, warehouseId, itemAmount, unitPrice },
-    });
-  } catch (error) {
-    console.error("Error validating purchase:", error);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-};
-

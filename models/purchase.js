@@ -46,8 +46,9 @@ const Purchase = sequelize.define("Purchase", {
   carId: DataTypes.INTEGER,
   chargedCost: DataTypes.DECIMAL(12,2), 
   unitExciseTax: DataTypes.DECIMAL(12,2),
-  vat: DataTypes.DECIMAL(12,2),
-}, {
+  vat: DataTypes.DECIMAL(12, 2),
+  dateOfPayment: DataTypes.DATE,
+}, { 
   timestamps: true,
 });
 

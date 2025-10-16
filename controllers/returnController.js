@@ -80,58 +80,84 @@ exports.deleteReturn = async (req, res) => {
   }
 };
 
-// ✅ CHANGE RETURN STATUS
-exports.changeReturnStatus = async (req, res) => {
+// --- Additional Functionalities ---
+
+// Return by itemId
+exports.getReturnsByItem = async (req, res) => {
   try {
-    const ret = await Return.findByPk(req.params.id);
-    if (!ret) return res.status(404).json({ message: "Return not found" });
+    const { itemId } = req.params;
+    const returns = await Return.findAll({ where: { itemId } });
 
-    const { status } = req.body;
-    if (!["approved", "rejected"].includes(status))
-      return res.status(400).json({ message: "Invalid status" });
-
-    await ret.update({ status });
-    return res.status(200).json({ message: `Return ${status}`, data: ret });
-  } catch (error) {
-    return res.status(500).json({ message: "Failed to change return status", error: error.message });
-  }
-};
-
-// ✅ GET RETURN REPORT
-exports.getReturnReport = async (req, res) => {
-  try {
-    const { warehouseId, itemId, status, type, startDate, endDate } = req.query;
-    const filters = {};
-
-    if (warehouseId) filters.warehouseId = warehouseId;
-    if (itemId) filters.itemId = itemId;
-    if (status) filters.status = status;
-    if (type) filters.type = type;
-    if (startDate || endDate) {
-      filters.createdAt = {};
-      if (startDate) filters.createdAt[Op.gte] = new Date(startDate);
-      if (endDate) filters.createdAt[Op.lte] = new Date(endDate);
+    if (!returns.length) {
+      return res.status(404).json({ message: "No returns found for this item" });
     }
 
-    const report = await Return.findAll({
-      where: filters,
-      attributes: [
-        "itemId",
-        "warehouseId",
-        "status",
-        "type",
-        [sequelize.fn("SUM", sequelize.col("returnQuantity")), "totalQuantity"],
-      ],
-      include: [
-        { model: Item, as: "item", attributes: ["id", "name"] },
-        { model: Warehouse, as: "warehouse", attributes: ["id", "name"] },
-      ],
-      group: ["itemId", "warehouseId", "status", "type", "item.id", "warehouse.id"],
-    });
-
-    return res.status(200).json({ data: report });
+    res.status(200).json(returns);
   } catch (error) {
-    return res.status(500).json({ message: "Failed to generate return report", error: error.message });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
+// Return by userId
+exports.getReturnsByUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const returns = await Return.findAll({ where: { userId } });
+
+    if (!returns.length) {
+      return res.status(404).json({ message: "No returns found for this user" });
+    }
+
+    res.status(200).json(returns);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Return by warehouseId
+exports.getReturnsByWarehouse = async (req, res) => {
+  try {
+    const { warehouseId } = req.params;
+    const returns = await Return.findAll({ where: { warehouseId } });
+
+    if (!returns.length) {
+      return res.status(404).json({ message: "No returns found for this warehouse" });
+    }
+
+    res.status(200).json(returns);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// --- Report by date range ---
+exports.getReturnReportByDate = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ message: "Please provide startDate and endDate" });
+    }
+
+    const returns = await Return.findAll({
+      where: {
+        createdAt: {
+          [Op.between]: [new Date(startDate), new Date(endDate)],
+        },
+      },
+      order: [["createdAt", "DESC"]],
+    });
+
+    if (!returns.length) {
+      return res.status(404).json({ message: "No returns found in this date range" });
+    }
+
+    res.status(200).json({
+      message: "Return report generated successfully",
+      count: returns.length,
+      data: returns,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};

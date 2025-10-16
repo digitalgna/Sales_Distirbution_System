@@ -16,6 +16,7 @@ const Return = sequelize.define("Return", {
     onDelete: 'CASCADE'
   },
   returnQuantity: { type: DataTypes.INTEGER, allowNull: false },
+  returnDate: DataTypes.DATE,
   reason: {
     type: DataTypes.STRING,
     allowNull: true

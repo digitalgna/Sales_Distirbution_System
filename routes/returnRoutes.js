@@ -10,9 +10,12 @@ router.put("/:id", returnController.updateReturn); // Update a return
 router.delete("/:id", returnController.deleteReturn); // Delete a return
 
 // Additional functionalities
-router.patch("/:id/status", returnController.changeReturnStatus); // Approve or reject a return
+// Filter by item, user, warehouse
+router.get("/item/:itemId", returnController.getReturnsByItem);
+router.get("/user/:userId", returnController.getReturnsByUser);
+router.get("/warehouse/:warehouseId", returnController.getReturnsByWarehouse);
 
-// Reporting
-router.get("/report/summary", returnController.getReturnReport); // Generate return report
+// Report by date range
+router.get("/report/by-date", returnController.getReturnReportByDate);
 
 module.exports = router;
