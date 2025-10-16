@@ -339,11 +339,11 @@ module.exports = {
   getStockoutById,
   updateStockout,
   deleteStockout,
-  validateStockAvailability,
-  linkStockoutToSaleOrCar,
-  calculateStockoutBonus,
+  validateStockAvailability, // remove 
+  linkStockoutToSaleOrCar, // remove
+  calculateStockoutBonus, // remove
   generateStockoutSummary,
   getStockoutHistory,
-  sendStockoutAlerts,
-  reconcileStockoutWithReturn,
+  sendStockoutAlerts, // remove
+  reconcileStockoutWithReturn,// remove
 };

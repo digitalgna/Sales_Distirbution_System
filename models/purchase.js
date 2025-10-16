@@ -44,7 +44,7 @@ const Purchase = sequelize.define("Purchase", {
   sponsor: DataTypes.INTEGER,
   bonus: DataTypes.INTEGER,
   carId: DataTypes.INTEGER,
-  chargedCost: DataTypes.DECIMAL(12,2),// transportation or delivery cost
+  chargedCost: DataTypes.DECIMAL(12,2), 
   unitExciseTax: DataTypes.DECIMAL(12,2),
   vat: DataTypes.DECIMAL(12,2),
 }, {

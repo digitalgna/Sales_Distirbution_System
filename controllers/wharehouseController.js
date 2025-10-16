@@ -317,9 +317,9 @@ module.exports = {
   getWarehouseById,
   updateWarehouse,
   deleteWarehouse,
-  checkWarehouseCapacity,
-  assignUsersToWarehouse,
-  getWarehouseInventoryOverview,
-  getWarehouseActivityLog,
-  monitorWarehouseHealth,
+  checkWarehouseCapacity,//
+  assignUsersToWarehouse,//
+  getWarehouseInventoryOverview,//
+  getWarehouseActivityLog,//
+  monitorWarehouseHealth,//
 };

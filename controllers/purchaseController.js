@@ -383,6 +383,6 @@ module.exports = {
   deletePurchase,
   updateStockAfterPurchase,
   calculatePurchaseTaxes,
-  trackPurchaseStatus,
-  validatePurchase,
+  trackPurchaseStatus, //remove 
+  validatePurchase, // remove
 };

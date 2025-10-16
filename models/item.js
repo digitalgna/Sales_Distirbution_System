@@ -19,7 +19,7 @@ const Item = sequelize.define("Item", {
   quantity: { type: DataTypes.INTEGER, defaultValue: 0 },
   unit:{ type: DataTypes.STRING, allowNull: false},
   unitPrice: {type: DataTypes.DECIMAL(10, 2), allowNull: false, },
-  totalPrice: {type: DataTypes.DECIMAL(10, 2), allowNull: true},
+  totalPrice: {type: DataTypes.DECIMAL(10, 2), allowNull: false},
   salePrice: {type: DataTypes.DECIMAL(10,2), allowNull: true},
   minQuantity: {type: DataTypes.INTEGER, allowNull: false},
   description: { type: DataTypes.STRING, allowNull: true},
