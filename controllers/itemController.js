@@ -3,7 +3,7 @@ const { Item, Category, Warehouse, Store, Sales, Lending, Purchase, Stockout, Re
 const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 
 // ✅ CREATE ITEM
-const createItem = async (req, res) => {
+exports.createItem = async (req, res) => {
   try {
     const {
       categoryId,
@@ -56,7 +56,7 @@ const createItem = async (req, res) => {
 };
 
 // ✅ READ ALL ITEMS (with optional filters)
-const getItems = async (req, res) => {
+exports.getItems = async (req, res) => {
   try {
     const { search, categoryId, warehouseId } = req.query;
 
@@ -82,7 +82,7 @@ const getItems = async (req, res) => {
 };
 
 // ✅ READ SINGLE ITEM
-const getItemById = async (req, res) => {
+exports.getItemById = async (req, res) => {
   try {
     const { id } = req.params;
     const item = await Item.findByPk(id, {
@@ -100,7 +100,7 @@ const getItemById = async (req, res) => {
   }
 };
 
-const updateItem = async (req, res) => {
+exports.updateItem = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -123,7 +123,7 @@ const updateItem = async (req, res) => {
 };
 
 // ✅ DELETE ITEM
-const deleteItem = async (req, res) => {
+exports.deleteItem = async (req, res) => {
   try {
     const { id } = req.params;
     const item = await Item.findByPk(id);
@@ -139,7 +139,7 @@ const deleteItem = async (req, res) => {
 //== Additional Features Implementations ==========
 
 // Calculate and update total price based on quantity and unit price
-const updateItemTotalPrice = async (req, res) => {
+exports.updateItemTotalPrice = async (req, res) => {
   try {
     const { itemId } = req.params;
 
@@ -167,7 +167,7 @@ const updateItemTotalPrice = async (req, res) => {
 };
 
 // Check and alert for low stock or expiring items
-const checkLowStockAndExpiration = async (req, res) => {
+exports.checkLowStockAndExpiration = async (req, res) => {
   try {
     const { warehouseId, minQuantityThreshold, daysToExpiration = 30 } = req.query;
 
@@ -289,7 +289,7 @@ const generateItemTransactionReport = async (req, res) => {
 };
 
 // Reassign item to a new category or warehouse
-const reassignItem = async (req, res) => {
+exports.reassignItem = async (req, res) => {
   try {
     const { itemId, newCategoryId, newWarehouseId } = req.body;
 
@@ -348,7 +348,7 @@ const reassignItem = async (req, res) => {
 };
 
 // Validate item before transaction (e.g., sale, lending, stockout)
-const validateItemForTransaction = async (req, res) => {
+exports.validateItemForTransaction = async (req, res) => {
   try {
     const { itemId, quantity, transactionType } = req.body;
 
@@ -386,15 +386,3 @@ const validateItemForTransaction = async (req, res) => {
   }
 };
 
-module.exports = {
-  createItem,
-  getItems,
-  getItemById,
-  updateItem,
-  deleteItem,
-  updateItemTotalPrice,
-  checkLowStockAndExpiration,
-  generateItemTransactionReport,
-  reassignItem,
-  validateItemForTransaction,
-};

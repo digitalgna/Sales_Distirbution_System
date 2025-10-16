@@ -1,11 +1,8 @@
 const { Return, Item, User, Warehouse } = require("../models");
 const { Op } = require("sequelize");
 
-/**
- * Create a new return entry
- * Expected body: { itemId, returnQuantity, reason, userId, warehouseId, type, description }
- */
-const createReturn = async (req, res) => {
+
+exports.createReturn = async (req, res) => {
   try {
     const newReturn = await Return.create(req.body);
     return res.status(201).json({ message: "Return created successfully", data: newReturn });
@@ -14,11 +11,8 @@ const createReturn = async (req, res) => {
   }
 };
 
-/**
- * Get all return entries
- * Optional query params: status, type, warehouseId, userId
- */
-const getAllReturns = async (req, res) => {
+
+exports.getAllReturns = async (req, res) => {
   try {
     const filters = {};
     if (req.query.status) filters.status = req.query.status;
@@ -42,10 +36,8 @@ const getAllReturns = async (req, res) => {
   }
 };
 
-/**
- * Get a single return entry by ID
- */
-const getReturnById = async (req, res) => {
+
+exports.getReturnById = async (req, res) => {
   try {
     const ret = await Return.findByPk(req.params.id, {
       include: [
@@ -62,11 +54,8 @@ const getReturnById = async (req, res) => {
   }
 };
 
-/**
- * Update a return entry
- * Can update: returnQuantity, reason, status, description
- */
-const updateReturn = async (req, res) => {
+
+exports.updateReturn = async (req, res) => {
   try {
     const ret = await Return.findByPk(req.params.id);
     if (!ret) return res.status(404).json({ message: "Return not found" });
@@ -78,10 +67,8 @@ const updateReturn = async (req, res) => {
   }
 };
 
-/**
- * Delete a return entry
- */
-const deleteReturn = async (req, res) => {
+// ✅ DELETE RETURN
+exports.deleteReturn = async (req, res) => {
   try {
     const ret = await Return.findByPk(req.params.id);
     if (!ret) return res.status(404).json({ message: "Return not found" });
@@ -93,11 +80,8 @@ const deleteReturn = async (req, res) => {
   }
 };
 
-/**
- * Approve or reject a return
- * Expected body: { status: 'approved' | 'rejected' }
- */
-const changeReturnStatus = async (req, res) => {
+// ✅ CHANGE RETURN STATUS
+exports.changeReturnStatus = async (req, res) => {
   try {
     const ret = await Return.findByPk(req.params.id);
     if (!ret) return res.status(404).json({ message: "Return not found" });
@@ -113,11 +97,8 @@ const changeReturnStatus = async (req, res) => {
   }
 };
 
-/**
- * Reporting: Get return summary grouped by warehouse and/or item
- * Optional query params: warehouseId, itemId, status, type, startDate, endDate
- */
-const getReturnReport = async (req, res) => {
+// ✅ GET RETURN REPORT
+exports.getReturnReport = async (req, res) => {
   try {
     const { warehouseId, itemId, status, type, startDate, endDate } = req.query;
     const filters = {};
@@ -154,12 +135,3 @@ const getReturnReport = async (req, res) => {
   }
 };
 
-module.exports = {
-  createReturn,
-  getAllReturns,
-  getReturnById,
-  updateReturn,
-  deleteReturn,
-  changeReturnStatus,
-  getReturnReport,
-};

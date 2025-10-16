@@ -1,76 +1,227 @@
 const { Op } = require("sequelize");
-const { Purchase, Customer, Item, Warehouse, Store,  User } = require("../models/index");
 const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
+const sequelize = require("../config/db");
+const Item = require("./item.js");
+const Customer = require("./customer.js");
+const Warehouse = require("./wharehouse.js");
+const Store = require("./store.js");
+const Balance = require("./balance.js");
+const Purchase = require("./purchase.js");
 
-
-// ✅ CREATE PURCHASE
-const createPurchase = async (req, res) => {
+// Create functionality
+exports.createPurchase = async (data) => {
+  const t = await sequelize.transaction();
   try {
-    const {
-      customerId, // ✅ include this
-      itemId,
-      warehouseId,
-      itemAmount,
-      unitPrice,
-      status,
-      withholdingAmount,
-      date,
-      sponsor,
-      bonus,
-      carId,
-      chargedCost,
-      unitExciseTax,
-      vat
-    } = req.body;
-
-    // Basic validations
-    if (!customerId || !itemId || !warehouseId || !itemAmount || !unitPrice) {
-      return res.status(400).json({ message: "Missing required fields" });
+    // Set default status to 'pending' if not provided
+    if (!data.status) data.status = 'pending';
+    
+    // Validate required fields
+    if (!data.itemId || !data.warehouseId || !data.customerId || !data.itemAmount || !data.totalPrice) {
+      throw new Error('Missing required fields: itemId, warehouseId, customerId, itemAmount, or totalPrice');
     }
 
-    // Check if related models exist
-    const [customer, item, warehouse] = await Promise.all([
-      Customer.findByPk(customerId),
-      Item.findByPk(itemId),
-      Warehouse.findByPk(warehouseId),
-    ]);
+    // Create the purchase
+    const purchase = await Purchase.create(data, { transaction: t });
 
-    if (!customer || !item || !warehouse) {
-      return res.status(404).json({ message: "Customer, Item or Warehouse not found" });
+    // If status is 'completed', update related tables
+    if (purchase.status === 'completed') {
+      // Update Item quantity
+      const item = await Item.findByPk(purchase.itemId, { transaction: t });
+      if (!item) throw new Error('Item not found');
+      item.quantity = (item.quantity || 0) + purchase.itemAmount;
+      await item.save({ transaction: t });
+
+      // Update Store quantity
+      const [store, created] = await Store.findOrCreate({
+        where: { itemId: purchase.itemId, warehouseId: purchase.warehouseId },
+        defaults: { quantity: 0 },
+        transaction: t
+      });
+      store.quantity += purchase.itemAmount;
+      await store.save({ transaction: t });
+
+      // Update Balance (decrease)
+      const balance = await Balance.findOne({ 
+        where: { customerId: purchase.customerId }, 
+        transaction: t 
+      });
+      if (!balance) throw new Error('Balance not found for customer');
+      balance.amount = (parseFloat(balance.amount) || 0) - parseFloat(purchase.totalPrice);
+      await balance.save({ transaction: t });
     }
 
-    const totalPrice = itemAmount * unitPrice;
-
-    const newPurchase = await Purchase.create({
-      customerId, // ✅ include this
-      itemId,
-      warehouseId,
-      itemAmount,
-      unitPrice,
-      totalPrice,
-      status,
-      withholdingAmount,
-      date,
-      sponsor,
-      bonus,
-      carId,
-      chargedCost,
-      unitExciseTax,
-      vat
-    });
-
-    res.status(201).json({
-      message: "Purchase created successfully",
-      data: newPurchase,
-    });
+    await t.commit();
+    return purchase;
   } catch (error) {
-    console.error("Error creating purchase:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    await t.rollback();
+    throw error;
   }
-};
+}
+
+// Update functionality
+exports.updatePurchase = async (id, data) => {
+  const t = await sequelize.transaction();
+  try {
+    const purchase = await Purchase.findByPk(id, { transaction: t });
+    if (!purchase) throw new Error('Purchase not found');
+
+    const oldStatus = purchase.status;
+    const oldItemAmount = purchase.itemAmount;
+    const oldTotalPrice = purchase.totalPrice;
+    const oldItemId = purchase.itemId;
+    const oldWarehouseId = purchase.warehouseId;
+    const oldCustomerId = purchase.customerId;
+
+    // Apply updates
+    await purchase.update(data, { transaction: t });
+
+    const newStatus = purchase.status;
+
+    // Handle status changes and adjustments
+    if (newStatus === 'completed' && oldStatus !== 'completed') {
+      // Apply increases for new completion
+      const item = await Item.findByPk(purchase.itemId, { transaction: t });
+      if (!item) throw new Error('Item not found');
+      item.quantity = (item.quantity || 0) + purchase.itemAmount;
+      await item.save({ transaction: t });
+
+      const [store, created] = await Store.findOrCreate({
+        where: { itemId: purchase.itemId, warehouseId: purchase.warehouseId },
+        defaults: { quantity: 0 },
+        transaction: t
+      });
+      store.quantity += purchase.itemAmount;
+      await store.save({ transaction: t });
+
+      const balance = await Balance.findOne({ 
+        where: { customerId: purchase.customerId }, 
+        transaction: t 
+      });
+      if (!balance) throw new Error('Balance not found for customer');
+      balance.amount = (parseFloat(balance.amount) || 0) - parseFloat(purchase.totalPrice);
+      await balance.save({ transaction: t });
+    } else if (newStatus !== 'completed' && oldStatus === 'completed') {
+      // Reverse changes for de-completion
+      const item = await Item.findByPk(oldItemId, { transaction: t });
+      if (item) {
+        item.quantity = (item.quantity || 0) - oldItemAmount;
+        await item.save({ transaction: t });
+      }
+
+      const store = await Store.findOne({
+        where: { itemId: oldItemId, warehouseId: oldWarehouseId },
+        transaction: t
+      });
+      if (store) {
+        store.quantity = (store.quantity || 0) - oldItemAmount;
+        await store.save({ transaction: t });
+      }
+
+      const balance = await Balance.findOne({ 
+        where: { customerId: oldCustomerId }, 
+        transaction: t 
+      });
+      if (balance) {
+        balance.amount = (parseFloat(balance.amount) || 0) + parseFloat(oldTotalPrice);
+        await balance.save({ transaction: t });
+      }
+    } else if (newStatus === 'completed' && oldStatus === 'completed') {
+      // Adjust differences if already completed
+      const itemDiff = purchase.itemAmount - oldItemAmount;
+      const priceDiff = parseFloat(purchase.totalPrice) - parseFloat(oldTotalPrice);
+
+      // If itemId, warehouseId, or customerId changed, reverse old and apply new
+      if (purchase.itemId !== oldItemId || purchase.warehouseId !== oldWarehouseId || purchase.customerId !== oldCustomerId) {
+        // Reverse old
+        const oldItem = await Item.findByPk(oldItemId, { transaction: t });
+        if (oldItem) {
+          oldItem.quantity = (oldItem.quantity || 0) - oldItemAmount;
+          await oldItem.save({ transaction: t });
+        }
+
+        const oldStore = await Store.findOne({
+          where: { itemId: oldItemId, warehouseId: oldWarehouseId },
+          transaction: t
+        });
+        if (oldStore) {
+          oldStore.quantity = (oldStore.quantity || 0) - oldItemAmount;
+          await oldStore.save({ transaction: t });
+        }
+
+        const oldBalance = await Balance.findOne({ 
+          where: { customerId: oldCustomerId }, 
+          transaction: t 
+        });
+        if (oldBalance) {
+          oldBalance.amount = (parseFloat(oldBalance.amount) || 0) + parseFloat(oldTotalPrice);
+          await oldBalance.save({ transaction: t });
+        }
+
+        // Apply new
+        const newItem = await Item.findByPk(purchase.itemId, { transaction: t });
+        if (!newItem) throw new Error('New item not found');
+        newItem.quantity = (newItem.quantity || 0) + purchase.itemAmount;
+        await newItem.save({ transaction: t });
+
+        const [newStore, created] = await Store.findOrCreate({
+          where: { itemId: purchase.itemId, warehouseId: purchase.warehouseId },
+          defaults: { quantity: 0 },
+          transaction: t
+        });
+        newStore.quantity += purchase.itemAmount;
+        await newStore.save({ transaction: t });
+
+        const newBalance = await Balance.findOne({ 
+          where: { customerId: purchase.customerId }, 
+          transaction: t 
+        });
+        if (!newBalance) throw new Error('New balance not found for customer');
+        newBalance.amount = (parseFloat(newBalance.amount) || 0) - parseFloat(purchase.totalPrice);
+        await newBalance.save({ transaction: t });
+      } else {
+        // Simple diff adjustment
+        if (itemDiff !== 0) {
+          const item = await Item.findByPk(purchase.itemId, { transaction: t });
+          if (item) {
+            item.quantity = (item.quantity || 0) + itemDiff;
+            await item.save({ transaction: t });
+          }
+
+          const store = await Store.findOne({
+            where: { itemId: purchase.itemId, warehouseId: purchase.warehouseId },
+            transaction: t
+          });
+          if (store) {
+            store.quantity = (store.quantity || 0) + itemDiff;
+            await store.save({ transaction: t });
+          }
+        }
+
+        if (priceDiff !== 0) {
+          const balance = await Balance.findOne({ 
+            where: { customerId: purchase.customerId }, 
+            transaction: t 
+          });
+          if (balance) {
+            balance.amount = (parseFloat(balance.amount) || 0) - priceDiff;
+            await balance.save({ transaction: t });
+          }
+        }
+      }
+    }
+
+    await t.commit();
+    return purchase;
+  } catch (error) {
+    await t.rollback();
+    throw error;
+  }
+}
+
+module.exports = { Purchase, createPurchase, updatePurchase };
 
 
-const getPurchases = async (req, res) => {
+exports.getPurchases = async (req, res) => {
   try {
     const { customerId, itemId, warehouseId, status, search, page, limit } = req.query;
     const where = {};
@@ -120,13 +271,10 @@ const getPurchases = async (req, res) => {
   }
 };
 
-module.exports = { getPurchases };
-
-
 
 
 // ✅ READ SINGLE PURCHASE
-const getPurchaseById = async (req, res) => {
+exports.getPurchaseById = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -149,10 +297,8 @@ const getPurchaseById = async (req, res) => {
   }
 };
 
-
-
 // ✅ UPDATE PURCHASE
-const updatePurchase = async (req, res) => {
+exports.updatePurchase = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -176,7 +322,7 @@ const updatePurchase = async (req, res) => {
 };
 
 // ✅ DELETE PURCHASE
-const deletePurchase = async (req, res) => {
+exports.deletePurchase = async (req, res) => {
   try {
     const { id } = req.params;
     const purchase = await Purchase.findByPk(id);
@@ -194,7 +340,7 @@ const deletePurchase = async (req, res) => {
 // additional functionalities 
 
 // Update stock after purchase
-const updateStockAfterPurchase = async (req, res) => {
+exports.updateStockAfterPurchase = async (req, res) => {
   try {
     const { purchaseId } = req.params;
 
@@ -238,7 +384,7 @@ const updateStockAfterPurchase = async (req, res) => {
 };
 
 // Calculate and validate taxes (VAT, excise tax, withholding)
-const calculatePurchaseTaxes = async (req, res) => {
+exports.calculatePurchaseTaxes = async (req, res) => {
   try {
     const { purchaseId } = req.params;
 
@@ -293,7 +439,7 @@ const calculatePurchaseTaxes = async (req, res) => {
 
 
 // Track purchase status and notify users
-const trackPurchaseStatus = async (req, res) => {
+exports.trackPurchaseStatus = async (req, res) => {
   try {
     const { purchaseId, newStatus } = req.body;
 
@@ -338,7 +484,7 @@ const trackPurchaseStatus = async (req, res) => {
 };
 
 // Validate purchase before creation
-const validatePurchase = async (req, res) => {
+exports.validatePurchase = async (req, res) => {
   try {
     const { itemId, warehouseId, itemAmount, unitPrice } = req.body;
 
@@ -375,14 +521,3 @@ const validatePurchase = async (req, res) => {
   }
 };
 
-module.exports = {
-  createPurchase,
-  getPurchases,
-  getPurchaseById,
-  updatePurchase,
-  deletePurchase,
-  updateStockAfterPurchase,
-  calculatePurchaseTaxes,
-  trackPurchaseStatus, //remove 
-  validatePurchase, // remove
-};

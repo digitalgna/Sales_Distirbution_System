@@ -3,7 +3,7 @@ const { Category, Item, Store, Warehouse } = require("../models/index");
 const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 
 // ✅ CREATE CATEGORY
-const createCategory = async (req, res) => {
+exports.createCategory = async (req, res) => {
   try {
     const { name, description } = req.body;
 
@@ -20,7 +20,7 @@ const createCategory = async (req, res) => {
 };
 
 // ✅ READ ALL CATEGORIES 
-const getCategories = async (req, res) => {
+exports.getCategories = async (req, res) => {
   try {
     const categories = await Category.findAll({ order: [["createdAt", "DESC"]] });
     res.status(200).json(categories);
@@ -30,7 +30,7 @@ const getCategories = async (req, res) => {
 };
 
 // ✅ READ SINGLE CATEGORY
-const getCategoryById = async (req, res) => {
+exports.getCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
     const category = await Category.findByPk(id);
@@ -44,7 +44,7 @@ const getCategoryById = async (req, res) => {
 };
 
 // ✅ UPDATE CATEGORY
-const updateCategory = async (req, res) => {
+exports.updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -64,11 +64,9 @@ const updateCategory = async (req, res) => {
 //== Additional Features Implementations ==========
 
 
-
-// /**
 //  * 2️⃣ Get item count per category
-//  */
-const getCategoryItemCount = async (req, res) => {
+
+exports.getCategoryItemCount = async (req, res) => {
   try {
     const categories = await Category.findAll({
       attributes: [
@@ -88,10 +86,9 @@ const getCategoryItemCount = async (req, res) => {
   }
 };
 
-/**
- * 3️⃣ Category reporting (items, sales, returns)
- */
-const getCategoryReport = async (req, res) => {
+
+// 3️⃣ Category reporting (items, sales, returns)
+exports.getCategoryReport = async (req, res) => {
   try {
     const categories = await Category.findAll({
       attributes: ["id", "name"],
@@ -120,11 +117,9 @@ const getCategoryReport = async (req, res) => {
   }
 };
 
-/**
- * 4️⃣ Delete category with validation
- *    - Prevent deletion if category has items
- */
-const deleteCategory = async (req, res) => {
+
+// ✅ DELETE CATEGORY
+exports.deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -148,7 +143,7 @@ const deleteCategory = async (req, res) => {
 
 
 // Analyze item distribution across categories
-const analyzeCategoryItemDistribution = async (req, res) => {
+exports.analyzeCategoryItemDistribution = async (req, res) => {
   try {
     // Fetch all categories with associated items count
     const categories = await Category.findAll({
@@ -190,11 +185,8 @@ const analyzeCategoryItemDistribution = async (req, res) => {
   }
 };
 
-
-
-
 // Generate category inventory report
-const generateCategoryInventoryReport = async (req, res) => {
+exports.generateCategoryInventoryReport = async (req, res) => {
   try {
     const { categoryId, warehouseId } = req.query;
 
@@ -259,16 +251,3 @@ const generateCategoryInventoryReport = async (req, res) => {
   }
 };
 
-
-
-module.exports = {
-  createCategory,
-  getCategories,
-  getCategoryById,
-  updateCategory,
-  deleteCategory,
-  analyzeCategoryItemDistribution,
-  generateCategoryInventoryReport,
-  getCategoryItemCount,
-  getCategoryReport
-};

@@ -3,7 +3,7 @@ const { Stockout, Store, Item, Warehouse, Sales, Car, User, Return } = require("
 const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 
 // ✅ CREATE STOCKOUT
-const createStockout = async (req, res) => {
+exports.createStockout = async (req, res) => {
   try {
     const { name, amount, sponsor, bonus, salesId, carId } = req.body;
 
@@ -28,7 +28,7 @@ const createStockout = async (req, res) => {
 };
 
 // ✅ READ ALL STOCKOUTS
-const getStockouts = async (req, res) => {
+exports.getStockouts = async (req, res) => {
   try {
     const stockouts = await Stockout.findAll({ order: [["createdAt", "DESC"]] });
     res.status(200).json(stockouts);
@@ -39,7 +39,7 @@ const getStockouts = async (req, res) => {
 };
 
 // ✅ READ SINGLE STOCKOUT
-const getStockoutById = async (req, res) => {
+exports.getStockoutById = async (req, res) => {
   try {
     const { id } = req.params;
     const stockout = await Stockout.findByPk(id);
@@ -54,7 +54,7 @@ const getStockoutById = async (req, res) => {
 };
 
 // ✅ UPDATE STOCKOUT
-const updateStockout = async (req, res) => {
+exports.updateStockout = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -71,7 +71,7 @@ const updateStockout = async (req, res) => {
 };
 
 // ✅ DELETE STOCKOUT
-const deleteStockout = async (req, res) => {
+exports.deleteStockout = async (req, res) => {
   try {
     const { id } = req.params;
     const stockout = await Stockout.findByPk(id);
@@ -89,7 +89,7 @@ const deleteStockout = async (req, res) => {
 //Additional functionalities
 
 // Validate stock availability before creating a stockout
-const validateStockAvailability = async (req, res) => {
+exports.validateStockAvailability = async (req, res) => {
   try {
     const { itemId, warehouseId, amount } = req.body;
 
@@ -117,7 +117,7 @@ const validateStockAvailability = async (req, res) => {
 };
 
 // Validate and link stockout to Sales or Car
-const linkStockoutToSaleOrCar = async (req, res) => {
+exports.linkStockoutToSaleOrCar = async (req, res) => {
   try {
     const { itemId, warehouseId, amount, salesId, carId } = req.body;
 
@@ -156,7 +156,7 @@ const linkStockoutToSaleOrCar = async (req, res) => {
 };
 
 // Calculate or validate bonus for stockout
-const calculateStockoutBonus = async (req, res) => {
+exports.calculateStockoutBonus = async (req, res) => {
   try {
     const { itemId, amount, bonus } = req.body;
     const BONUS_PERCENTAGE = 0.05; // Configurable: 5% of item price * amount
@@ -189,7 +189,7 @@ const calculateStockoutBonus = async (req, res) => {
 };
 
 // Generate stockout summary report
-const generateStockoutSummary = async (req, res) => {
+exports.generateStockoutSummary = async (req, res) => {
   try {
     const { startDate, endDate, warehouseId, itemId } = req.query;
 
@@ -224,7 +224,7 @@ const generateStockoutSummary = async (req, res) => {
 };
 
 // Track stockout history for auditing
-const getStockoutHistory = async (req, res) => {
+exports.getStockoutHistory = async (req, res) => {
   try {
     const { itemId, warehouseId, sponsor } = req.query;
 
@@ -254,7 +254,7 @@ const getStockoutHistory = async (req, res) => {
 };
 
 // Send stockout alerts for low stock levels
-const sendStockoutAlerts = async (req, res) => {
+exports.sendStockoutAlerts = async (req, res) => {
   try {
     const { itemId, warehouseId, amount } = req.body;
     const STOCK_THRESHOLD = 10; // Configurable threshold
@@ -293,7 +293,7 @@ const sendStockoutAlerts = async (req, res) => {
 };
 
 // Reconcile stockout with returns
-const reconcileStockoutWithReturn = async (req, res) => {
+exports.reconcileStockoutWithReturn = async (req, res) => {
   try {
     const { returnId, itemId, warehouseId, quantityReturned } = req.body;
 
@@ -333,17 +333,3 @@ const reconcileStockoutWithReturn = async (req, res) => {
   }
 };
 
-module.exports = {
-  createStockout,
-  getStockouts,
-  getStockoutById,
-  updateStockout,
-  deleteStockout,
-  validateStockAvailability, // remove 
-  linkStockoutToSaleOrCar, // remove
-  calculateStockoutBonus, // remove
-  generateStockoutSummary,
-  getStockoutHistory,
-  sendStockoutAlerts, // remove
-  reconcileStockoutWithReturn,// remove
-};

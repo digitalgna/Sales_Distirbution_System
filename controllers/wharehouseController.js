@@ -2,8 +2,7 @@ const { Op } = require("sequelize");
 const { Warehouse, User, Item, Store, Lending, Purchase, Stockout, Return } = require("../models/index");
 const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 
-// ✅ CREATE WAREHOUSE
-const createWarehouse = async (req, res) => {
+exports.createWarehouse = async (req, res) => {
   try {
     const { name, address, size } = req.body;
 
@@ -20,17 +19,17 @@ const createWarehouse = async (req, res) => {
 };
 
 // ✅ READ ALL WAREHOUSES
-const getWarehouses = async (req, res) => {
-  try {
-    const warehouses = await Warehouse.findAll({ order: [["createdAt", "DESC"]] });
-    res.status(200).json(warehouses);
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
+exports.getWarehouses = async (req, res) => {
+    try {
+      const warehouses = await Warehouse.findAll({ order: [["createdAt", "DESC"]] });
+      res.status(200).json(warehouses);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error.message });
+    }
 };
 
 // ✅ READ SINGLE WAREHOUSE
-const getWarehouseById = async (req, res) => {
+exports.getWarehouseById = async (req, res) => {
   try {
     const { id } = req.params;
     const warehouse = await Warehouse.findByPk(id);
@@ -44,7 +43,7 @@ const getWarehouseById = async (req, res) => {
 };
 
 // ✅ UPDATE WAREHOUSE
-const updateWarehouse = async (req, res) => {
+exports.updateWarehouse = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -60,7 +59,7 @@ const updateWarehouse = async (req, res) => {
 };
 
 // ✅ DELETE WAREHOUSE
-const deleteWarehouse = async (req, res) => {
+exports.deleteWarehouse = async (req, res) => {
   try {
     const { id } = req.params;
     const warehouse = await Warehouse.findByPk(id);
@@ -77,7 +76,7 @@ const deleteWarehouse = async (req, res) => {
 //===================== ADDITIONAL FUNCTIONALITIES ======================
 
 // Check warehouse capacity utilization
-const checkWarehouseCapacity = async (req, res) => {
+exports.checkWarehouseCapacity = async (req, res) => {
   try {
     const { warehouseId } = req.params;
 
@@ -114,7 +113,7 @@ const checkWarehouseCapacity = async (req, res) => {
 };
 
 // Assign users to a warehouse
-const assignUsersToWarehouse = async (req, res) => {
+exports.assignUsersToWarehouse = async (req, res) => {
   try {
     const { warehouseId, userIds } = req.body;
 
@@ -158,7 +157,7 @@ const assignUsersToWarehouse = async (req, res) => {
 };
 
 // Generate warehouse inventory overview
-const getWarehouseInventoryOverview = async (req, res) => {
+exports.getWarehouseInventoryOverview = async (req, res) => {
   try {
     const { warehouseId } = req.params;
 
@@ -198,7 +197,7 @@ const getWarehouseInventoryOverview = async (req, res) => {
 };
 
 // Log warehouse activity (purchases, stockouts, lendings, returns)
-const getWarehouseActivityLog = async (req, res) => {
+exports.getWarehouseActivityLog = async (req, res) => {
   try {
     const { warehouseId, startDate, endDate } = req.query;
 
@@ -252,7 +251,7 @@ const getWarehouseActivityLog = async (req, res) => {
 };
 
 // Monitor warehouse health (e.g., critical stock or capacity issues)
-const monitorWarehouseHealth = async (req, res) => {
+exports.monitorWarehouseHealth = async (req, res) => {
   try {
     const { warehouseId, stockThreshold = 10, capacityThreshold = 90 } = req.query; // Configurable thresholds
 
@@ -311,15 +310,3 @@ const monitorWarehouseHealth = async (req, res) => {
   }
 };
 
-module.exports = {
-  createWarehouse,
-  getWarehouses,
-  getWarehouseById,
-  updateWarehouse,
-  deleteWarehouse,
-  checkWarehouseCapacity,//
-  assignUsersToWarehouse,//
-  getWarehouseInventoryOverview,//
-  getWarehouseActivityLog,//
-  monitorWarehouseHealth,//
-};

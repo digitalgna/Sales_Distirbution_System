@@ -3,7 +3,7 @@ const { Store, Item, Warehouse, User } = require("../models/index");
 const { sendEmail } = require("../utils/notificationService"); // Hypothetical notification service
 
 // ✅ CREATE STORE RECORD
-const createStore = async (req, res) => {
+exports.createStore = async (req, res) => {
   try {
     const { itemId, warehouseId, quantity } = req.body;
 
@@ -32,7 +32,7 @@ const createStore = async (req, res) => {
 };
 
 // ✅ READ ALL STORE RECORDS
-const getStores = async (req, res) => {
+exports.getStores = async (req, res) => {
   try {
     const { itemId, warehouseId } = req.query;
     const where = {};
@@ -57,7 +57,7 @@ const getStores = async (req, res) => {
 };
 
 // ✅ READ SINGLE STORE RECORD
-const getStoreById = async (req, res) => {
+exports.getStoreById = async (req, res) => {
   try {
     const { id } = req.params;
     const store = await Store.findByPk(id, {
@@ -77,7 +77,7 @@ const getStoreById = async (req, res) => {
 };
 
 // ✅ UPDATE STORE RECORD
-const updateStore = async (req, res) => {
+exports.updateStore = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -94,7 +94,7 @@ const updateStore = async (req, res) => {
 };
 
 // ✅ DELETE STORE RECORD
-const deleteStore = async (req, res) => {
+exports.deleteStore = async (req, res) => {
   try {
     const { id } = req.params;
     const store = await Store.findByPk(id);
@@ -112,7 +112,7 @@ const deleteStore = async (req, res) => {
 // ====================== ADDITIONAL FUNCTIONALITIES ======================
 
 // Adjust stock quantity (e.g., for manual corrections or reconciliations)
-const adjustStockQuantity = async (req, res) => {
+exports.adjustStockQuantity = async (req, res) => {
   try {
     const { itemId, warehouseId, adjustment, reason } = req.body;
 
@@ -151,7 +151,7 @@ const adjustStockQuantity = async (req, res) => {
 };
 
 // Check and alert for low stock levels
-const checkLowStock = async (req, res) => {
+exports.checkLowStock = async (req, res) => {
   try {
     const { warehouseId, threshold = 10 } = req.query; // Configurable threshold
 
@@ -197,7 +197,7 @@ const checkLowStock = async (req, res) => {
 };
 
 // Transfer stock between warehouses
-const transferStock = async (req, res) => {
+exports.transferStock = async (req, res) => {
   try {
     const { itemId, fromWarehouseId, toWarehouseId, quantity } = req.body;
 
@@ -245,7 +245,7 @@ const transferStock = async (req, res) => {
 };
 
 // Generate stock summary report
-const generateStockSummary = async (req, res) => {
+exports.generateStockSummary = async (req, res) => {
   try {
     const { warehouseId, itemId } = req.query;
 
@@ -277,7 +277,7 @@ const generateStockSummary = async (req, res) => {
 };
 
 // Track stock history for auditing
-const getStockHistory = async (req, res) => {
+exports.getStockHistory = async (req, res) => {
   try {
     const { itemId, warehouseId } = req.query;
 
@@ -303,15 +303,3 @@ const getStockHistory = async (req, res) => {
   }
 };
 
-module.exports = {
-  createStore,
-  getStores,
-  getStoreById,
-  updateStore,
-  deleteStore,
-  adjustStockQuantity,
-  checkLowStock,
-  transferStock,
-  generateStockSummary,
-  getStockHistory,
-};
