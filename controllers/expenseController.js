@@ -39,7 +39,6 @@ exports.updateExpense = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, amount, description, expenseDate } = req.body;
-
     const expense = await Expense.findByPk(id);
     if (!expense) return res.status(404).json({ message: "Expense not found" });
 

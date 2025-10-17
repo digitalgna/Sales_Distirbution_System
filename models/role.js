@@ -12,15 +12,6 @@ const Role = sequelize.define("Role", {
     allowNull: false,
     unique: true, 
   },
-  permissionId: {
-    type: DataTypes.INTEGER,
-    allowNull: false, 
-    references: {
-      model: "Permissions",
-      key: "id",
-    },
-    onDelete: 'CASCADE'
-  },
 });
 
 module.exports = Role;

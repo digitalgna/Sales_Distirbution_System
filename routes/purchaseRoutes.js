@@ -2,11 +2,13 @@ const express = require("express");
 const router = express.Router();
 const purchaseController = require("../controllers/purchaseController");
 
-// CRUD routes
+
 router.post("/", purchaseController.createPurchase);
-router.get("/", purchaseController.getPurchases);
+router.get("/", purchaseController.getAllPurchases);
 router.get("/:id", purchaseController.getPurchaseById);
 router.put("/:id", purchaseController.updatePurchase);
 router.delete("/:id", purchaseController.deletePurchase);
+
+router.post("/report", purchaseController.getPurchaseReport);
 
 module.exports = router;
