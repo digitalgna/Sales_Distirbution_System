@@ -56,7 +56,7 @@ exports.getReturns = async (req, res) => {
       where,
       include: [
         { model: Item, attributes: ["id", "name"] },
-        { model: User, attributes: ["id", "name"] },
+        { model: User, attributes: ["id", "fullName"] },
         { model: Warehouse, attributes: ["id", "name"] },
       ],
       order: [["createdAt", "DESC"]],
@@ -76,7 +76,7 @@ exports.getReturnById = async (req, res) => {
     const returnRecord = await Return.findByPk(id, {
       include: [
         { model: Item, attributes: ["id", "name"] },
-        { model: User, attributes: ["id", "name"] },
+        { model: User, attributes: ["id", "fullname"] },
         { model: Warehouse, attributes: ["id", "name"] },
       ],
     });

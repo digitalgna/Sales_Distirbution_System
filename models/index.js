@@ -227,6 +227,10 @@ Return.belongsTo(Warehouse, { foreignKey: "warehouseId" });
 Item.hasMany(Return, { foreignKey: "itemId", onDelete: "CASCADE" });
 Return.belongsTo(Item, { foreignKey: "itemId" });
 
+// USER ↔ RETURN
+User.hasMany(Return, { foreignKey: "userId", onDelete: "CASCADE" });
+Return.belongsTo(User, { foreignKey: "userId" });
+
 // ====================== PURCHASE RELATIONSHIPS ======================
 
 // SUPPLIER ↔ PURCHASE

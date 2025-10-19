@@ -122,3 +122,31 @@ exports.deletePermission = async (req, res) => {
     res.status(500).json({ message: "Server Error", error });
   }
 };
+
+exports.getPermissionsByRole = async (req, res) => {
+  try {
+    const { roleId } = req.params;
+
+    if (!roleId) {
+      return res.status(400).json({ message: "roleId is required" });
+    }
+
+    const permissions = await Permission.findAll({
+      where: { roleId },
+      attributes: ["id", "module", "actions", "roleId"],
+    });
+
+    // Format actions as array
+    const formatted = permissions.map(p => ({
+      id: p.id,
+      module: p.module,
+      actions: Array.isArray(p.actions) ? p.actions : JSON.parse(p.actions),
+      roleId: p.roleId
+    }));
+
+    res.status(200).json(formatted);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
