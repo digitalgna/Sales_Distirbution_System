@@ -22,7 +22,7 @@ app.use("/api", routes);
 
 // Sync DB
 sequelize
-  .sync({ alter: true })
+  .sync({ alter: false })
   .then(() => console.log("✅ Database synced successfully"))
   .catch((err) => console.error("❌ Database sync error:", err));
 
