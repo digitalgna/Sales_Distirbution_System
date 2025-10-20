@@ -9,4 +9,6 @@ router.get("/:id", returnController.getReturnById);
 router.put("/:id", returnController.updateReturn);
 router.delete("/:id", returnController.deleteReturn);
 
+router.post("/report", returnController.getReturnReport);
+
 module.exports = router;

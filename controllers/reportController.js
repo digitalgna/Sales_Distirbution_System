@@ -14,7 +14,7 @@ exports.getIncomeReport = async (req, res) => {
 
     const whereClause = {};
     if (startDate && endDate) {
-      whereClause.salesDate = { [Op.between]: [startDate, endDate] };
+      whereClause.salesDate = { [Op.between]: [new Date(startDate), new Date(endDate)] };
     }
 
     // 1. Aggregate totals
@@ -23,21 +23,24 @@ exports.getIncomeReport = async (req, res) => {
       attributes: [
         [Sequelize.fn("SUM", Sequelize.col("totalPrice")), "totalSales"],
         [Sequelize.fn("SUM", Sequelize.col("paidAmount")), "totalPaid"],
-        [Sequelize.literal("SUM(totalPrice - paidAmount)"), "outstandingAmount"]
+        [Sequelize.literal("SUM(totalPrice - paidAmount)"), "remaining"]
       ],
       raw: true
     });
 
-    // 2. Detailed records
+    // 2. Detailed records (useful info only)
     const records = await Sales.findAll({
       where: whereClause,
-      attributes: ["id", "userId", "customerId", "itemId", "quantity", "totalPrice", "paidAmount", "salesDate", "warehouseId"],
+      attributes: ["quantity", "totalPrice", "paidAmount", "salesDate"],
       include: [
-        { model: User, attributes: ["id", "fullName"] },
-        { model: Customer, attributes: ["id", "name"] },
-        { model: Item, attributes: ["id", "name", "unitPrice"] }
+        { model: User, attributes: ["fullName"] },
+        { model: Customer, attributes: ["name"] },
+        { model: Item, attributes: ["name", "unitPrice"] },
+        { model: Warehouse, attributes: ["name"]}
       ],
-      order: [["salesDate", "ASC"]]
+      order: [["salesDate", "ASC"]],
+      raw: true,
+      nest: true
     });
 
     res.status(200).json({
@@ -50,46 +53,77 @@ exports.getIncomeReport = async (req, res) => {
   }
 };
 
-
 exports.getProfitAnalysis = async (req, res) => {
   try {
     const { startDate, endDate } = req.body;
-    const dateFilter = startDate && endDate ? { [Op.between]: [startDate, endDate] } : undefined;
 
-    // 1️⃣ Totals
-    const totalSales = await Sales.sum("totalPrice", dateFilter ? { where: { salesDate: dateFilter } } : {});
-    const totalPurchase = await Purchase.sum("totalPrice", dateFilter ? { where: { purchaseDate: dateFilter } } : {});
-    const totalExpense = await Expense.sum("amount", dateFilter ? { where: { expenseDate: dateFilter } } : {});
+    // 1️⃣ Normalize dates
+    let dateFilter;
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      dateFilter = { [Op.between]: [start, end] };
+    }
+
+    // 2️⃣ Totals
+    const totalSales = await Sales.sum(
+      "totalPrice",
+      dateFilter ? { where: { salesDate: dateFilter } } : {}
+    );
+
+    const totalPurchase = await Purchase.sum(
+      "totalPrice",
+      dateFilter
+        ? { where: { purchaseDate: dateFilter, status: "approved" } }
+        : { where: { status: "approved" } }
+    );
+
+    const totalExpense = await Expense.sum(
+      "amount",
+      dateFilter ? { where: { expenseDate: dateFilter } } : {}
+    );
 
     const grossProfit = (totalSales || 0) - (totalPurchase || 0);
     const netProfit = grossProfit - (totalExpense || 0);
 
-    // 2️⃣ Detailed records
+    // 3️⃣ Detailed records
     const salesRecords = await Sales.findAll({
       where: dateFilter ? { salesDate: dateFilter } : {},
-      attributes: ["id", "userId", "customerId", "itemId", "quantity", "totalPrice", "paidAmount", "salesDate", "warehouseId"],
+      attributes: ["quantity", "totalPrice", "paidAmount", "salesDate"],
       include: [
-        { model: require("../models/user"), attributes: ["id", "fullName"] },
-        { model: require("../models/customer"), attributes: ["id", "name"] },
-        { model: require("../models/item"), attributes: ["id", "name", "unitPrice"] }
+        { model: User, attributes: ["fullName"] },
+        { model: Customer, attributes: ["name"] },
+        { model: Item, attributes: ["name", "unitPrice"] }
       ],
-      order: [["salesDate", "ASC"]]
+      order: [["salesDate", "ASC"]],
+      raw: true,
+      nest: true
     });
 
     const purchaseRecords = await Purchase.findAll({
-      where: dateFilter ? { purchaseDate: dateFilter } : {},
+      where: dateFilter
+        ? { purchaseDate: dateFilter, status: "approved" }
+        : { status: "approved" },
+      attributes: ["quantity", "totalPrice", "purchaseDate"],
       include: [
-        { model: require("../models/item") },
-        { model: require("../models/wharehouse") }
+        { model: Item, attributes: ["name", "unitPrice"] },
+        { model: Warehouse, attributes: ["name"] }
       ],
-      order: [["purchaseDate", "ASC"]]
+      order: [["purchaseDate", "ASC"]],
+      raw: true,
+      nest: true
     });
 
     const expenseRecords = await Expense.findAll({
       where: dateFilter ? { expenseDate: dateFilter } : {},
-      order: [["expenseDate", "ASC"]]
+      attributes: ["amount", "description", "expenseDate"],
+      order: [["expenseDate", "ASC"]],
+      raw: true
     });
 
+    // 4️⃣ Return report
     res.status(200).json({
       totals: {
         totalSales: totalSales || 0,
@@ -104,6 +138,7 @@ exports.getProfitAnalysis = async (req, res) => {
         expenses: expenseRecords
       }
     });
+
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch profit/loss report", error: err.message });
   }

@@ -1,15 +1,25 @@
 const Permission = require("../models/permission");
+const Role = require("../models/role");
 
-// CREATE a new permission
+
 exports.createPermission = async (req, res) => {
-  const { module, actions } = req.body;
+  const { module, actions, roleId } = req.body;
+
+  if (!module || !actions || !roleId) {
+    return res.status(400).json({ message: "Module, actions and role are required" });
+  }
 
   if (!Array.isArray(actions)) {
     return res.status(400).json({ message: "Actions must be an array" });
   }
 
+  if (roleId) {
+    const role = await Role.findByPk(roleId);
+    if (!role) return res.status(404).json({ message: "Role not found" });
+  }
+
   try {
-    const newPermission = await Permission.create({ module, actions });
+    const newPermission = await Permission.create({ module, actions, roleId });
     res.status(201).json(newPermission);
   } catch (error) {
     console.error(error);
@@ -25,6 +35,7 @@ exports.getAllPermissions = async (req, res) => {
       id: p.id,
       module: p.module,
       actions: Array.isArray(p.actions) ? p.actions : JSON.parse(p.actions),
+      roleId: p.roleId,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt
     }));
@@ -46,6 +57,7 @@ exports.getPermissionById = async (req, res) => {
       id: p.id,
       module: p.module,
       actions: Array.isArray(p.actions) ? p.actions : JSON.parse(p.actions),
+      roleId: p.roleId,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt
     };
@@ -60,10 +72,14 @@ exports.getPermissionById = async (req, res) => {
 // UPDATE a permission by ID
 exports.updatePermission = async (req, res) => {
   const { id } = req.params;
-  const { module, actions } = req.body;
+  const { module, actions, roleId } = req.body;
 
   if (actions && !Array.isArray(actions)) {
     return res.status(400).json({ message: "Actions must be an array" });
+  }
+  if (roleId) {
+    const role = await Role.findByPk(roleId);
+    if (!role) return res.status(404).json({ message: "Role not found" });
   }
 
   try {
@@ -72,6 +88,7 @@ exports.updatePermission = async (req, res) => {
 
     permission.module = module || permission.module;
     permission.actions = actions || permission.actions;
+    permission.roleId = roleId || permission.roleId;
 
     await permission.save();
 
@@ -79,6 +96,7 @@ exports.updatePermission = async (req, res) => {
       id: permission.id,
       module: permission.module,
       actions: Array.isArray(permission.actions) ? permission.actions : JSON.parse(permission.actions),
+      roleId: permission.roleId,
       createdAt: permission.createdAt,
       updatedAt: permission.updatedAt
     };
@@ -102,5 +120,33 @@ exports.deletePermission = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server Error", error });
+  }
+};
+
+exports.getPermissionsByRole = async (req, res) => {
+  try {
+    const { roleId } = req.params;
+
+    if (!roleId) {
+      return res.status(400).json({ message: "roleId is required" });
+    }
+
+    const permissions = await Permission.findAll({
+      where: { roleId },
+      attributes: ["id", "module", "actions", "roleId"],
+    });
+
+    // Format actions as array
+    const formatted = permissions.map(p => ({
+      id: p.id,
+      module: p.module,
+      actions: Array.isArray(p.actions) ? p.actions : JSON.parse(p.actions),
+      roleId: p.roleId
+    }));
+
+    res.status(200).json(formatted);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };

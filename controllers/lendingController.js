@@ -157,35 +157,71 @@ exports.getLendingsByItem = async (req, res) => {
 
 exports.getLendingReportByDateRange = async (req, res) => {
   try {
-    const { startDate, endDate } = req.body;
+    const { startDate, endDate, userId, customerId, itemId, warehouseId } = req.body;
 
-    if (!startDate || !endDate) {
-      return res.status(400).json({ message: "Please provide both startDate and endDate in request body." });
+    const whereClause = {};
+
+    // Optional foreign key filters
+    if (userId) whereClause.userId = userId;
+    if (customerId) whereClause.customerId = customerId;
+    if (itemId) whereClause.itemId = itemId;
+    if (warehouseId) whereClause.warehouseId = warehouseId;
+
+    // Optional date filters
+    if (startDate) {
+      const start = new Date(startDate);
+      whereClause.lendingDate = { [Op.gte]: start };
     }
 
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1);
+      if (whereClause.lendingDate) {
+        whereClause.lendingDate[Op.lt] = end;
+      } else {
+        whereClause.lendingDate = { [Op.lt]: end };
+      }
+    }
+
+    // Fetch filtered data
     const lendings = await Lending.findAll({
-      where: {
-        lendingDate: {
-          [Op.between]: [new Date(startDate), new Date(endDate)]
-        }
-      },
+      where: whereClause,
       include: [
         { model: User, attributes: ["id", "fullName"] },
         { model: Customer, attributes: ["id", "name"] },
         { model: Item, attributes: ["id", "name"] },
-        { model: Warehouse, attributes: ["id", "name"] }
+        { model: Warehouse, attributes: ["id", "name"] },
       ],
       order: [["lendingDate", "ASC"]],
     });
 
-    const totalQuantity = lendings.reduce((sum, lend) => sum + parseInt(lend.quantity || 0), 0);
+    // Summary
+    const totalQuantity = lendings.reduce(
+      (sum, lend) => sum + parseInt(lend.quantity || 0),
+      0
+    );
+
+    // Format report
+    const report = lendings.map((l) => ({
+      id: l.id,
+      user: l.User?.fullName,
+      customer: l.Customer?.name,
+      item: l.Item?.name,
+      warehouse: l.Warehouse?.name,
+      quantity: l.quantity,
+      lendingDate: l.lendingDate,
+    }));
 
     res.status(200).json({
       totalQuantity,
       count: lendings.length,
-      lendings,
+      report,
     });
   } catch (error) {
-    res.status(500).json({ message: "Failed to generate lending report", error: error.message });
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Failed to generate lending report", error: error.message });
   }
 };
+

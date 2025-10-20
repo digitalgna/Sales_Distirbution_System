@@ -36,10 +36,10 @@ const Purchase = sequelize.define("Purchase", {
   quantity: { type: DataTypes.INTEGER, allowNull: false },   // renamed from itemAmount
   unitPrice: { type: DataTypes.DECIMAL(12,2), allowNull: false },
   totalPrice: { type: DataTypes.DECIMAL(12,2), allowNull: false }, // ensure calculated as quantity * unitPrice
-  status: { type: DataTypes.STRING, defaultValue: 'pending' },
-  withholdingAmount: { type: DataTypes.DECIMAL(12,2), defaultValue: 0 },
-  vat: { type: DataTypes.DECIMAL(12,2), defaultValue: 0 },
-  exciseTax: { type: DataTypes.DECIMAL(12,2), defaultValue: 0 },
+  status: { type: DataTypes.ENUM('pending','approved', 'rejected'), defaultValue: 'pending',  }, 
+  withholdingAmount: { type: DataTypes.DECIMAL(12,2), defaultValue: 0, allowNull: false },
+  vat: { type: DataTypes.DECIMAL(12,2), defaultValue: 0, allowNull: false },
+  exciseTax: { type: DataTypes.DECIMAL(12,2), defaultValue: 0, allowNull: false },// additional tax for items like alcohol
   carId: { type: DataTypes.INTEGER, allowNull: true },
   sponsor: { type: DataTypes.STRING, allowNull: true },
   bonus: { type: DataTypes.STRING, allowNull: true },
@@ -48,4 +48,4 @@ const Purchase = sequelize.define("Purchase", {
   timestamps: true,
 });
 
-module.exports = Purchase;
+module.exports = Purchase; 

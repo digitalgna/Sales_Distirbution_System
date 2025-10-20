@@ -21,23 +21,12 @@ const Warehouse = require("./wharehouse");
 // Define associations
 
 //permission and role 
-Permission.hasMany(Role, {
-  foreignKey: "permissionId",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
-
-Role.belongsTo(Permission, 
-  { foreignKey: "permissionId" });
+Role.hasMany(Permission, {foreignKey: "roleId"});
+Permission.belongsTo(Role, { foreignKey: "roleId" });
 
 
   //role and user
-Role.hasMany(User, {
-  foreignKey: "roleId",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
-
+Role.hasMany(User, {foreignKey: "roleId", onDelete: "SET NULL", onUpdate: "CASCADE",});
 User.belongsTo(Role, { foreignKey: "roleId" });
 
 //customer and balance
@@ -189,6 +178,20 @@ Item.hasMany(Store, { foreignKey: "itemId", onDelete: "CASCADE" });
 Store.belongsTo(Warehouse, { foreignKey: "warehouseId", onDelete: "CASCADE" });
 Warehouse.hasMany(Store, { foreignKey: "warehouseId", onDelete: "CASCADE" });
 
+Stockout.belongsTo(Item, { foreignKey: "itemId", onDelete: "CASCADE" });
+Item.hasMany(Stockout, { foreignKey: "itemId", onDelete: "CASCADE" });
+
+Stockout.belongsTo(Warehouse, { foreignKey: "warehouseId", onDelete: "CASCADE" });
+Warehouse.hasMany(Stockout, { foreignKey: "warehouseId", onDelete: "CASCADE" });
+
+//  Stockout → User (salesperson)
+Stockout.belongsTo(User, { foreignKey: "userId", onDelete: "CASCADE" });
+User.hasMany(Stockout, { foreignKey: "userId", onDelete: "CASCADE" });
+
+//  Stockout → Car
+Stockout.belongsTo(Car, { foreignKey: "carId", onDelete: "CASCADE" });
+Car.hasMany(Stockout, { foreignKey: "carId", onDelete: "CASCADE" });
+
 
 // ====================== INVENTORY RELATIONSHIPS ======================
 
@@ -223,6 +226,10 @@ Return.belongsTo(Warehouse, { foreignKey: "warehouseId" });
 // ITEM ↔ RETURN
 Item.hasMany(Return, { foreignKey: "itemId", onDelete: "CASCADE" });
 Return.belongsTo(Item, { foreignKey: "itemId" });
+
+// USER ↔ RETURN
+User.hasMany(Return, { foreignKey: "userId", onDelete: "CASCADE" });
+Return.belongsTo(User, { foreignKey: "userId" });
 
 // ====================== PURCHASE RELATIONSHIPS ======================
 
