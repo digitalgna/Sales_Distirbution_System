@@ -6,36 +6,68 @@ exports.createPermission = async (req, res) => {
   const { module, actions, roleId } = req.body;
 
   if (!module || !actions || !roleId) {
-    return res.status(400).json({ message: "Module, actions and role are required" });
+    return res.status(400).json({ message: "Module, actions, and role are required" });
   }
 
   if (!Array.isArray(actions)) {
     return res.status(400).json({ message: "Actions must be an array" });
   }
 
-  if (roleId) {
+  try {
     const role = await Role.findByPk(roleId);
     if (!role) return res.status(404).json({ message: "Role not found" });
-  }
 
-  try {
+    const existingPermission = await Permission.findOne({
+      where: { module, roleId },
+    });
+
+    if (existingPermission) {
+      // safely parse any stringified array
+      const existingActions = Array.isArray(existingPermission.actions)
+        ? existingPermission.actions
+        : JSON.parse(existingPermission.actions || "[]");
+
+      const duplicateActions = actions.filter(action =>
+        existingActions.includes(action)
+      );
+
+      if (duplicateActions.length > 0) {
+        return res.status(400).json({
+          message: `Duplicate actions for this module and role: ${duplicateActions.join(", ")}`,
+        });
+      }
+
+      const updatedActions = [...new Set([...existingActions, ...actions])];
+      existingPermission.actions = updatedActions;
+      await existingPermission.save();
+
+      return res.status(200).json({
+        message: "Permission updated",
+        permission: existingPermission,
+      });
+    }
+
     const newPermission = await Permission.create({ module, actions, roleId });
     res.status(201).json(newPermission);
   } catch (error) {
     console.error(error);
-    res.status(400).json({ message: "Failed to create permission", error });
+    res.status(500).json({ message: "Failed to create permission", error: error.message });
   }
 };
 
 // GET all permissions
 exports.getAllPermissions = async (req, res) => {
   try {
-    const permissions = await Permission.findAll();
+    const permissions = await Permission.findAll({           
+      include: [
+        { model: Role, attributes: ["id", "name"] },
+      ],}
+    );
     const formatted = permissions.map(p => ({
       id: p.id,
       module: p.module,
       actions: Array.isArray(p.actions) ? p.actions : JSON.parse(p.actions),
-      roleId: p.roleId,
+      role: p.Role ? { id: p.Role.id, name: p.Role.name } : null,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt
     }));

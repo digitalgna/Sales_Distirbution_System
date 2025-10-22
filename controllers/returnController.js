@@ -4,7 +4,7 @@ const User = require("../models/user");
 const Warehouse = require("../models/wharehouse");
 const { Op } = require("sequelize");
 
-// ✅ CREATE RETURN
+
 exports.createReturn = async (req, res) => {
   try {
     const { itemId, returnQuantity, reason, userId, warehouseId, type, description, returnDate } = req.body;
@@ -42,7 +42,7 @@ exports.createReturn = async (req, res) => {
   }
 };
 
-// ✅ READ ALL RETURNS
+
 exports.getReturns = async (req, res) => {
   try {
     const { itemId, userId, warehouseId, type, status } = req.query;

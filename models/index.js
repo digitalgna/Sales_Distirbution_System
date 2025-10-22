@@ -15,7 +15,6 @@ const Purchase = require("./purchase.js");
 const Return = require("./return.js");
 const Stockout = require("./stockout.js");
 const Store = require("./store.js");
-const Supplier = require("./supplier");
 const Warehouse = require("./wharehouse");
 
 // Define associations
@@ -233,9 +232,6 @@ Return.belongsTo(User, { foreignKey: "userId" });
 
 // ====================== PURCHASE RELATIONSHIPS ======================
 
-// SUPPLIER ↔ PURCHASE
-Supplier.hasMany(Purchase, { foreignKey: "supplierId", onDelete: "CASCADE" });
-Purchase.belongsTo(Supplier, { foreignKey: "supplierId" });
 
 // ITEM ↔ PURCHASE
 Item.hasMany(Purchase, { foreignKey: "itemId", onDelete: "CASCADE" });
@@ -253,7 +249,6 @@ module.exports = {
   Stockout,
   Store,
   Return,
-  Supplier,
   Purchase,
   sequelize, User, Role, Permission, Customer, Balance, Car, CarOperation, Sales, Lending, Expense
 };

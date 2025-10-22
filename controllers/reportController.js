@@ -35,7 +35,7 @@ exports.getIncomeReport = async (req, res) => {
       include: [
         { model: User, attributes: ["fullName"] },
         { model: Customer, attributes: ["name"] },
-        { model: Item, attributes: ["name", "unitPrice"] },
+        { model: Item, attributes: ["name", "salePrice"] },
         { model: Warehouse, attributes: ["name"]}
       ],
       order: [["salesDate", "ASC"]],
@@ -95,7 +95,7 @@ exports.getProfitAnalysis = async (req, res) => {
       include: [
         { model: User, attributes: ["fullName"] },
         { model: Customer, attributes: ["name"] },
-        { model: Item, attributes: ["name", "unitPrice"] }
+        { model: Item, attributes: ["name", "salePrice"] }
       ],
       order: [["salesDate", "ASC"]],
       raw: true,
