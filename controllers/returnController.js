@@ -2,6 +2,7 @@ const Return = require("../models/return");
 const Item = require("../models/item");
 const User = require("../models/user");
 const Warehouse = require("../models/wharehouse");
+const Store = require("../models/store");
 const { Op } = require("sequelize");
 
 
@@ -99,9 +100,38 @@ exports.updateReturn = async (req, res) => {
     const updates = req.body;
 
     const returnRecord = await Return.findByPk(id);
-    if (!returnRecord) return res.status(404).json({ message: "Return not found" });
+    if (!returnRecord) 
+      return res.status(404).json({ message: "Return not found" });
+
+    // Only update store if status is changed to "approved"
+    const statusChangedToApproved =
+      updates.status === "approved" && returnRecord.status !== "approved";
 
     await returnRecord.update(updates);
+
+    if (statusChangedToApproved) {
+      // Find store record for this item and warehouse
+      const store = await Store.findOne({
+        where: {
+          itemId: returnRecord.itemId,
+          warehouseId: returnRecord.warehouseId,
+        },
+      });
+
+      if (store) {
+        // Add returnQuantity to store quantity
+        store.quantity += returnRecord.returnQuantity;
+        await store.save();
+      } else {
+        // Optional: create store record if it doesn't exist
+        await Store.create({
+          itemId: returnRecord.itemId,
+          warehouseId: returnRecord.warehouseId,
+          quantity: returnRecord.returnQuantity,
+        });
+      }
+    }
+
     res.status(200).json({ message: "Return updated successfully", data: returnRecord });
   } catch (error) {
     console.error("Error updating return:", error);
