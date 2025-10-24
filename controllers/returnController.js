@@ -72,7 +72,6 @@ exports.getReturns = async (req, res) => {
   }
 };
 
-// ✅ READ SINGLE RETURN
 exports.getReturnById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -93,7 +92,36 @@ exports.getReturnById = async (req, res) => {
   }
 };
 
-// ✅ UPDATE RETURN
+exports.getReturnsByUserId = async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const returns = await Return.findAll({
+      where: { userId },
+      include: [
+        { model: Item, attributes: ["id", "name"] },
+        { model: Warehouse, attributes: ["id", "name"] },
+        { model: User, attributes: ["id", "fullName"] },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    if (!returns || returns.length === 0) {
+      return res.status(404).json({ message: "No returns found for this user." });
+    }
+
+    const cleanedReturns = returns.map((r) => {
+      const { itemId, userId, warehouseId, createdAt, updatedAt, ...rest } = r.toJSON();
+      return rest;
+    });
+
+    res.status(200).json(cleanedReturns);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
 exports.updateReturn = async (req, res) => {
   try {
     const { id } = req.params;
@@ -139,7 +167,6 @@ exports.updateReturn = async (req, res) => {
   }
 };
 
-// ✅ DELETE RETURN
 exports.deleteReturn = async (req, res) => {
   try {
     const { id } = req.params;

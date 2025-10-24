@@ -5,6 +5,7 @@ const stockoutController = require("../controllers/stockoutController");
 router.post("/", stockoutController.createStockout);
 router.get("/", stockoutController.getAllStockouts);
 router.get("/:id", stockoutController.getStockoutById);
+router.get("/user/:userId", stockoutController.getStockoutsByUserId);
 router.put("/:id", stockoutController.updateStockout);
 router.patch("/:id/status", stockoutController.updateStockoutStatus);
 router.delete("/:id", stockoutController.deleteStockout);

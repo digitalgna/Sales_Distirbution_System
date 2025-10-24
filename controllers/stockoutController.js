@@ -92,6 +92,37 @@ exports.getStockoutById = async (req, res) => {
   }
 };
 
+exports.getStockoutsByUserId = async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const stockouts = await Stockout.findAll({
+      where: { userId },
+      include: [
+        { model: Item, attributes: ["id", "name"] },
+        { model: Warehouse, attributes: ["id", "name"] },
+        { model: Car, attributes: ["id", "carPlate"] },
+        { model: User, attributes: ["id", "fullName"] },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    if (!stockouts || stockouts.length === 0) {
+      return res.status(404).json({ message: "No stockouts found for this user." });
+    }
+
+    // Remove redundant foreign keys
+    const cleanedStockouts = stockouts.map((s) => {
+      const { itemId, carId, userId, warehouseId, updatedAt, ...rest } = s.toJSON();
+      return rest;
+    });
+
+    res.status(200).json(cleanedStockouts);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Update stockout
 exports.updateStockout = async (req, res) => {
   const t = await sequelize.transaction();
