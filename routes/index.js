@@ -22,6 +22,8 @@ const salesRoutes = require("./salesRoutes");
 const lendingRoutes = require("./lendingRoutes");
 const reportRoutes = require("./reportRoutes");
 const dashboardRoutes = require("./dashboardRoutes");
+const fsRoutes = require("./fsRoutes");
+const balanceSheetRoutes = require("./balanceSheetRoutes");
 
 
 // Mount routes
@@ -46,6 +48,8 @@ router.use("/sales", salesRoutes);
 router.use("/lending", lendingRoutes);
 router.use("/report", reportRoutes);
 router.use("/dashboard", dashboardRoutes);
+router.use("/machinfs", fsRoutes);
+router.use("/balance-sheet", balanceSheetRoutes);
 
 
 module.exports = router;

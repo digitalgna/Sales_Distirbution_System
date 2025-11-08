@@ -7,18 +7,34 @@ exports.createPurchase = async (req, res) => {
   const t = await Purchase.sequelize.transaction();
 
   try {
-    const { supplierId, itemId, warehouseId, quantity, unitPrice } = req.body;
+    const {
+      supplierId,
+      itemId,
+      warehouseId,
+      quantity,
+      unitPrice,
+      subTotal,
+      exciseTaxedPrice,
+      priceAfterExice,
+      priceDiscount,
+      specialSalesDiscount,
+      serviceCharge,
+      totalBeforeVat,
+      totalWithVat,
+      fixedPriceDiscount,
+      totalVatedAfterDiscount,
+      withholdingAmount,
+      carId,
+      sponsor,
+      bonus,
+      purchaseDate
+    } = req.body;
 
+    // Check item existence
     const item = await Item.findByPk(itemId, { transaction: t });
     if (!item) return res.status(404).json({ message: "Item not found" });
 
-    const base = quantity * unitPrice;
-    const vat = base * 0.15;
-    const withholdingAmount = base * 0.03;
-    const exciseTax = item.applyExciseTax ? base * 0.25 : 0;
-    const totalPrice = base + vat + exciseTax;
-
-    // Create Purchase with status pending
+    // Create purchase using frontend-provided values
     const purchase = await Purchase.create(
       {
         supplierId,
@@ -26,19 +42,33 @@ exports.createPurchase = async (req, res) => {
         warehouseId,
         quantity,
         unitPrice,
-        totalPrice,
-        vat,
-        exciseTax,
-        withholdingAmount,
-        status: "pending", // default
+        subTotal,
+        exciseTaxedPrice,
+        priceAfterExice,
+        priceDiscount,
+        specialSalesDiscount,
+        serviceCharge,
+        totalBeforeVat,
+        totalWithVat,
+        fixedPriceDiscount,
+        totalVatedAfterDiscount,
+        withholdingAmount: withholdingAmount || 0,
+        carId,
+        sponsor,
+        bonus,
+        purchaseDate: purchaseDate || new Date(),
+        status: "pending",
       },
       { transaction: t }
     );
 
-    // Update supplier balance
-    const balance = await Balance.findOne({ where: { customerId: supplierId, itemId }, transaction: t });
-    if (balance) {
-      balance.amount -= totalPrice;
+    // Update supplier balance (same logic as before)
+    const balance = await Balance.findOne({
+      where: { customerId: supplierId, itemId },
+      transaction: t
+    });
+    if (balance && totalVatedAfterDiscount) {
+      balance.amount -= totalVatedAfterDiscount;
       await balance.save({ transaction: t });
     }
 
@@ -49,7 +79,6 @@ exports.createPurchase = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
 
 exports.getAllPurchases = async (req, res) => {
   try {

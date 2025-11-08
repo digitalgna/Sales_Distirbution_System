@@ -16,12 +16,13 @@ const Item = sequelize.define("Item", {
   },
   name: { type: DataTypes.STRING, allowNull: false },
   unit:{ type: DataTypes.STRING, allowNull: false},
-  unitPrice: {type: DataTypes.DECIMAL(10, 2), allowNull: false, },
-  salePrice: {type: DataTypes.DECIMAL(10,2), allowNull: true},
+  unitPrice: {type: DataTypes.DECIMAL(14, 4), allowNull: false, },
+  salePrice: {type: DataTypes.DECIMAL(14,4), allowNull: true},
   minQuantity: {type: DataTypes.INTEGER, allowNull: false},
   description: { type: DataTypes.STRING, allowNull: true},
   expirationDate: {type: DataTypes.DATE, allowNull: true},
-  applyExciseTax: {type: DataTypes.BOOLEAN, defaultValue: false}
+  // applyExciseTax: {type: DataTypes.BOOLEAN, defaultValue: false},
+  ExciseTax: {type: DataTypes.INTEGER, allowNull: true}
 }, {
   timestamps: true,
 });

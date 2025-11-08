@@ -25,26 +25,43 @@ const buildFileUrls = (req, files) => {
 // Create new sale
 exports.createSale = async (req, res) => {
   const t = await Sales.sequelize.transaction();
-
   try {
-    // Parse numeric fields safely
+    // Parse fields safely
     const userId = req.body.userId ? Number(req.body.userId) : null;
     const itemId = req.body.itemId ? Number(req.body.itemId) : null;
     const warehouseId = req.body.warehouseId ? Number(req.body.warehouseId) : null;
     const customerId = req.body.customerId ? Number(req.body.customerId) : null;
     const quantity = req.body.quantity ? Number(req.body.quantity) : null;
     const totalPrice = req.body.totalPrice ? Number(req.body.totalPrice) : null;
+    const totalTaxedPrice = req.body.totalTaxedPrice ? Number(req.body.totalTaxedPrice) : null;
     const paidAmount = req.body.paidAmount ? Number(req.body.paidAmount) : null;
-    const salesDate = req.body.salesDate ? new Date(req.body.salesDate) : null;
     const bank = req.body.bank || null;
+    const salesDate = req.body.salesDate ? new Date(req.body.salesDate) : new Date();
     const bonus = req.body.bonus ? Number(req.body.bonus) : null;
+    const bonusAmount = req.body.bonusAmount ? Number(req.body.bonusAmount) : null;
     const sponsor = req.body.sponsor ? Number(req.body.sponsor) : null;
+    const sponsurAmount = req.body.sponsurAmount ? Number(req.body.sponsurAmount) : null;
     const description = req.body.description || null;
+    const tinNo = req.body.tinNo ? Number(req.body.tinNo) : null;
+    const fsNoRaw = req.body.fsNo;
+    const machineNoRaw = req.body.machineNo;
+
+    // sanitize leading/trailing quotes if any
+    const fsNo =
+      typeof fsNoRaw === "string"
+        ? fsNoRaw.replace(/^"+|"+$/g, "")
+        : fsNoRaw || null;
+
+    const machineNo =
+      typeof machineNoRaw === "string"
+        ? machineNoRaw.replace(/^"+|"+$/g, "")
+        : machineNoRaw || null;
+
 
     // Validate required fields
-    if (!userId || !itemId || !warehouseId || !quantity || !totalPrice || !paidAmount || !salesDate) {
+    if (!userId || !itemId || !warehouseId || !quantity || !totalPrice || !paidAmount || !tinNo || !fsNo || !machineNo) {
       return res.status(400).json({
-        message: "userId, itemId, warehouseId, quantity, totalPrice, paidAmount, and salesDate are required."
+        message: "Missing required fields: userId, itemId, warehouseId, quantity, totalPrice, paidAmount, tinNo, fsNo, or machineNo.",
       });
     }
 
@@ -55,27 +72,25 @@ exports.createSale = async (req, res) => {
     const item = await Item.findByPk(itemId, { transaction: t });
     if (!item) return res.status(404).json({ message: "Item not found" });
 
-    // Check stock in Stockout table
-    const stock = await Stockout.findOne({
-      where: { itemId, warehouseId },
-      transaction: t
-    });
+    const warehouse = await Warehouse.findByPk(warehouseId);
+    if (!warehouse) return res.status(404).json({ message: "Warehouse not found" });
 
+    // Check stock
+    const stock = await Stockout.findOne({ where: { itemId, warehouseId }, transaction: t });
     if (!stock) return res.status(404).json({ message: "No stock found for this item in this warehouse" });
-
     if (stock.quantity < quantity) return res.status(400).json({ message: "Insufficient stock" });
 
-    // Deduct sold quantity from stock
+    // Deduct stock
     stock.quantity -= quantity;
     await stock.save({ transaction: t });
 
-    // Handle uploaded receipt files
+    // Handle uploaded receipts
     let recieptFiles = [];
     if (req.files && req.files.length > 0) {
       recieptFiles = req.files.map(f => f.filename);
     }
 
-    // Create sale
+    // Create sale record
     const sale = await Sales.create({
       userId,
       customerId,
@@ -83,12 +98,18 @@ exports.createSale = async (req, res) => {
       warehouseId,
       quantity,
       totalPrice,
+      totalTaxedPrice,
       paidAmount,
       reciept: recieptFiles,
       bank,
       salesDate,
       bonus,
+      bonusAmount,
       sponsor,
+      sponsurAmount,
+      tinNo,
+      fsNo,
+      machineNo,
       description
     }, { transaction: t });
 
@@ -96,14 +117,15 @@ exports.createSale = async (req, res) => {
 
     const saleJson = sale.toJSON();
     saleJson.reciept = buildFileUrls(req, sale.reciept);
-    res.status(201).json(saleJson);
+
+    res.status(201).json({ message: "Sale created successfully", sale: saleJson });
 
   } catch (error) {
     await t.rollback();
+    console.error("Create Sale Error:", error);
     res.status(500).json({ message: "Failed to create sale", error: error.message });
   }
 };
-
 
 // Get all sales
 exports.getAllSales = async (req, res) => {
@@ -156,26 +178,47 @@ exports.updateSale = async (req, res) => {
   try {
     const { id } = req.params;
     const sale = await Sales.findByPk(id, { transaction: t });
-    if (!sale) return res.status(404).json({ message: "Sale not found" });
-
-    const item = await Item.findByPk(sale.itemId, { transaction: t });
-    if (!item) return res.status(404).json({ message: "Item not found" });
-
-    // Handle receipt files
-    let recieptFiles = sale.reciept || [];
-    if (req.files && req.files.length > 0) {
-      recieptFiles = req.files.map(f => f.filename);
+    if (!sale) {
+      await t.rollback();
+      return res.status(404).json({ message: "Sale not found" });
     }
-    // Update sale
-    await sale.update({ ...req.body, reciept: recieptFiles }, { transaction: t });
+
+    // === FIX: Clean fsNo, machineNo from double quotes ===
+    const clean = (val) => {
+      if (typeof val !== "string") return val;
+      // Remove leading/trailing quotes: "000987" → 000987
+      return val.replace(/^"|"$/g, "").trim();
+    };
+
+    // Merge old + new receipts
+    let recieptFiles = Array.isArray(sale.reciept) ? [...sale.reciept] : [];
+    if (req.files?.length > 0) {
+      recieptFiles.push(...req.files.map(f => f.filename));
+    }
+
+    // === UPDATE WITH CLEANED VALUES ===
+    await sale.update(
+      {
+        ...req.body,
+        fsNo: clean(req.body.fsNo) || sale.fsNo,
+        machineNo: clean(req.body.machineNo) || sale.machineNo,
+        tinNo: Number(req.body.tinNo) || sale.tinNo,
+        reciept: recieptFiles,
+        credit: req.body.credit === true || req.body.credit === "true",
+      },
+      { transaction: t }
+    );
 
     await t.commit();
-    const saleJson = sale.toJSON();
-    saleJson.reciept = buildFileUrls(req, sale.reciept);
-    res.status(200).json({ message: "Sale updated successfully", sale: saleJson });
-  } catch (error) {
+
+    const updated = sale.toJSON();
+    updated.reciept = buildFileUrls(req, updated.reciept);
+
+    res.json({ message: "Sale updated!", sale: updated });
+  } catch (err) {
     await t.rollback();
-    res.status(500).json({ message: "Failed to update sale", error: error.message });
+    console.error("UPDATE ERROR:", err);
+    res.status(500).json({ message: "Update failed", error: err.message });
   }
 };
 
@@ -410,6 +453,89 @@ exports.getSalesReportByDateRange = async (req, res) => {
   }
 };
 
+
+//filters for only salesman
+exports.getSalesBySalesmanFiltered = async (req, res) => {
+  try {
+    const userId = Number(req.params.userId);
+    const {
+      customerId,
+      tinNo,
+      itemId,
+      warehouseId,
+      date,           // "2025-11-07"
+  startDate,     // "2025-11-01"
+  endDate         // "2025-11-07"
+    } = req.body;
+
+    // BASE: Only this salesman
+    const where = { userId };
+
+    // 1. Customer
+    if (customerId) where.customerId = Number(customerId);
+
+    // 2. TIN No (partial search)
+    if (tinNo) {
+      where.tinNo = { [Op.like]: `%${tinNo.trim()}%` };
+    }
+
+    // 3. Item
+    if (itemId) where.itemId = Number(itemId);
+
+    // 4. Warehouse
+    if (warehouseId) where.warehouseId = Number(warehouseId);
+
+    // 5. DATE LOGIC — SUPER SMART
+    if (date) {
+      const d = new Date(date);
+      const start = new Date(d.setHours(0, 0, 0, 0));
+      const end = new Date(d.setHours(23, 59, 59, 999));
+      where.salesDate = { [Op.between]: [start, end] };
+    } else if (startDate || endDate) {
+      const start = startDate ? new Date(startDate) : new Date("1970-01-01");
+      const end = endDate ? new Date(endDate) : new Date();
+      end.setHours(23, 59, 59, 999);
+      where.salesDate = { [Op.between]: [start, end] };
+    }
+
+    const sales = await Sales.findAll({
+      where,
+      include: [
+        { model: Customer, attributes: ["id", "name"] },
+        { model: Item, attributes: ["id", "name", "unitPrice"] },
+        { model: Warehouse, attributes: ["id", "name"] },
+        { model: User, attributes: ["id", "fullName"] },
+      ],
+      order: [["salesDate", "DESC"]],
+    });
+
+    const formatted = sales.map(s => {
+      const json = s.toJSON();
+      json.reciept = buildFileUrls(req, json.reciept);
+      return json;
+    });
+
+    const totalSales = sales.reduce((s, x) => s + Number(x.totalPrice || 0), 0);
+    const totalPaid = sales.reduce((s, x) => s + Number(x.paidAmount || 0), 0);
+
+    res.status(200).json({
+      salesmanId: userId,
+      filters: req.body,
+      count: formatted.length,
+      totalSales: Number(totalSales.toFixed(2)),
+      totalPaid: Number(totalPaid.toFixed(2)),
+      outstanding: Number((totalSales - totalPaid).toFixed(2)),
+      sales: formatted
+    });
+
+  } catch (error) {
+    console.error("FILTER ERROR:", error);
+    res.status(500).json({
+      message: "Failed to filter sales",
+      error: error.message
+    });
+  }
+};
 
 
 

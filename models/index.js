@@ -16,6 +16,8 @@ const Return = require("./return.js");
 const Stockout = require("./stockout.js");
 const Store = require("./store.js");
 const Warehouse = require("./wharehouse");
+const FsTable = require("./FSMachine.js");
+const BalanceSheet = require("./BalanceSheet.js");
 
 // Define associations
 
@@ -117,6 +119,9 @@ User.belongsTo(Warehouse, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
+
+User.hasMany(FsTable, { foreignKey: 'userId', onDelete: 'CASCADE' });
+FsTable.belongsTo(User, { foreignKey: 'userId' });
 
 //sales belong to warehouse
 Sales.belongsTo(Warehouse, { foreignKey: "warehouseId", onDelete: "CASCADE" });
@@ -250,5 +255,5 @@ module.exports = {
   Store,
   Return,
   Purchase,
-  sequelize, User, Role, Permission, Customer, Balance, Car, CarOperation, Sales, Lending, Expense
+  sequelize, User, Role, Permission, Customer, Balance, Car, CarOperation, Sales, Lending, Expense, FsTable, BalanceSheet
 };

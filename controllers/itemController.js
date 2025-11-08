@@ -13,21 +13,21 @@ exports.createItem = async (req, res) => {
       minQuantity,
       description,
       expirationDate,
-      applyExciseTax,
+      ExciseTax, // updated field
     } = req.body;
-    const item = await Item.create(
-        {
-          categoryId,
-          name,
-          unit,
-          unitPrice,
-          salePrice,
-          minQuantity,
-          description,
-          expirationDate: expirationDate || null,
-          applyExciseTax
-        },
-      );
+
+    const item = await Item.create({
+      categoryId,
+      name,
+      unit,
+      unitPrice,
+      salePrice,
+      minQuantity,
+      description,
+      expirationDate: expirationDate || null,
+      ExciseTax: ExciseTax || null, // ensure null if not provided
+    });
+
     res.status(201).json(item);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -55,7 +55,7 @@ exports.getItemById = async (req, res) => {
 
 exports.updateItem = async (req, res) => {
   try {
-    const { id } = req.params; // ✅ Get ID from URL param (/api/item/:id)
+    const { id } = req.params;
     const {
       categoryId,
       name,
@@ -65,7 +65,7 @@ exports.updateItem = async (req, res) => {
       minQuantity,
       description,
       expirationDate,
-      applyExciseTax,
+      ExciseTax, // updated field
     } = req.body;
 
     const item = await Item.findByPk(id);
@@ -80,7 +80,7 @@ exports.updateItem = async (req, res) => {
       minQuantity,
       description,
       expirationDate: expirationDate || null,
-      applyExciseTax: applyExciseTax === "true" || applyExciseTax === true,
+      ExciseTax: ExciseTax || null, // update integer field
     });
 
     res.status(200).json(item);

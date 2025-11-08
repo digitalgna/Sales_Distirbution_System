@@ -13,106 +13,120 @@ const User = require("../models/user");
 
 exports.getDashboard = async (req, res) => {
   try {
-    
     const filters = req.method === "POST" ? req.body : {};
     const { startDate, endDate, warehouseId } = filters;
+    const dateFilter = startDate && endDate ? { [Op.between]: [startDate, endDate] } : {};
 
-    const dateFilter = startDate && endDate ? { [Op.between]: [startDate, endDate] } : undefined;
+    const where = (base = {}) => {
+      const w = { ...base };
+      if (Object.keys(dateFilter).length) w.salesDate = dateFilter;
+      if (warehouseId) w.warehouseId = warehouseId;
+      return w;
+    };
 
-    // --- SALES ---
-    const salesWhere = dateFilter ? { salesDate: dateFilter } : {};
-    if (warehouseId) salesWhere.warehouseId = warehouseId;
+    // === SAFE SUM & COUNT ===
+    const safeSum = async (model, field, where) => Number(await model.sum(field, { where })) || 0;
+    const safeCount = async (model, where) => Number(await model.count({ where })) || 0;
 
-    const totalSales = await Sales.sum("totalPrice", { where: salesWhere });
-    const totalPaid = await Sales.sum("paidAmount", { where: salesWhere });
-    const totalOutstanding = (totalSales || 0) - (totalPaid || 0);
-    const totalSalesCount = await Sales.count({ where: salesWhere });
+    // SALES
+    const salesWhere = where();
+    const totalSales = await safeSum(Sales, "totalPrice", salesWhere);
+    const totalPaid = await safeSum(Sales, "paidAmount", salesWhere);
+    const totalSalesCount = await safeCount(Sales, salesWhere);
 
-    // --- PURCHASES ---
-    const purchaseWhere = dateFilter ? { purchaseDate: dateFilter } : {};
-    if (warehouseId) purchaseWhere.warehouseId = warehouseId;
+    // PURCHASES
+    const purchaseWhere = where({ purchaseDate: dateFilter });
+    const totalPurchase = await safeSum(Purchase, "totalVatedAfterDiscount", purchaseWhere);
+    const totalPurchaseCount = await safeCount(Purchase, purchaseWhere);
 
-    const totalPurchase = await Purchase.sum("totalPrice", { where: purchaseWhere });
-    const totalPurchaseCount = await Purchase.count({ where: purchaseWhere });
+    // EXPENSES
+    const expenseWhere = where({ expenseDate: dateFilter });
+    const totalExpense = await safeSum(Expense, "amount", expenseWhere);
+    const totalExpenseCount = await safeCount(Expense, expenseWhere);
 
-    // --- EXPENSES ---
-    const expenseWhere = dateFilter ? { expenseDate: dateFilter } : {};
-    const totalExpense = await Expense.sum("amount", { where: expenseWhere });
-    const totalExpenseCount = await Expense.count({ where: expenseWhere });
+    // OTHERS
+    const totalWarehouses = await safeCount(Warehouse);
+    const totalCars = await safeCount(Car);
+    const totalItems = await safeCount(Item);
+    const totalLending = await safeSum(Lending, "quantity", where({ lendingDate: dateFilter }));
+    const totalReturn = await safeCount(Return, where({ createdAt: dateFilter }));
+    const totalStockout = await safeCount(Stockout, where({ createdAt: dateFilter }));
 
-
-    // --- ADDITIONAL METRICS ---
-    const totalWarehouses = await Warehouse.count();
-    const totalCars = await Car.count();
-    const totalItems = await Item.count();
-
-    const lendingWhere = dateFilter ? { lendingDate: dateFilter } : {};
-    if (warehouseId) lendingWhere.warehouseId = warehouseId;
-
-    const totalLendingAmount = await Lending.sum("quantity", { where: lendingWhere });
-
-    const balanceSums = await Balance.findAll({
+    // BALANCE — SAFE!
+    const balanceRow = (await Balance.findAll({
       attributes: [
         [Sequelize.fn("SUM", Sequelize.literal("CASE WHEN type='credit' THEN amount ELSE 0 END")), "totalCredit"],
         [Sequelize.fn("SUM", Sequelize.literal("CASE WHEN type='debit' THEN amount ELSE 0 END")), "totalDebit"]
       ],
       raw: true
-    });
+    }))[0] || { totalCredit: 0, totalDebit: 0 };
 
-    const returnWhere = dateFilter ? { createdAt: dateFilter } : {};
-    if (warehouseId) returnWhere.warehouseId = warehouseId;
-    const totalReturn = await Return.count({ where: returnWhere });
-
-    const stockoutWhere = dateFilter ? { createdAt: dateFilter } : {};
-    if (warehouseId) stockoutWhere.warehouseId = warehouseId;
-    const totalStockout = await Stockout.count({ where: stockoutWhere });
-
-    // --- RECENT RECORDS ---
+    // RECENT RECORDS
     const recentSales = await Sales.findAll({
       where: salesWhere,
       order: [["salesDate", "DESC"]],
       limit: 10,
-      attributes: ["id", "userId", "itemId", "quantity", "totalPrice","salesDate"],
+      attributes: ["id", "userId", "itemId", "quantity", "totalPrice", "salesDate", "fsNo"],
       include: [
-        { model: Item, attributes: ["id", "name"] },
-        { model: User, attributes: ["id", "fullName"] }
-    ]
+        { model: Item, attributes: ["name"] },
+        { model: User, attributes: ["fullName"] }
+      ],
+      raw: true
     });
 
     const recentPurchases = await Purchase.findAll({
       where: purchaseWhere,
       order: [["purchaseDate", "DESC"]],
-      limit: 10,
-      attributes: ["id", "supplierId", "itemId", "totalPrice", "purchaseDate"]
+      limit: 5,
+      attributes: ["id", "totalVatedAfterDiscount", "purchaseDate"],
+      raw: true
     });
 
     const recentExpenses = await Expense.findAll({
       where: expenseWhere,
       order: [["expenseDate", "DESC"]],
-      limit: 10,
-      attributes: ["id", "name", "amount", "expenseDate"]
+      limit: 5,
+      attributes: ["id", "name", "amount"],
+      raw: true
     });
 
     res.status(200).json({
+      success: true,
       summary: {
-        sales: { totalSales: totalSales || 0, totalPaid: totalPaid || 0, totalOutstanding, count: totalSalesCount },
-        purchases: { totalPurchase: totalPurchase || 0, count: totalPurchaseCount },
-        expenses: { totalExpense: totalExpense || 0, count: totalExpenseCount },
+        sales: {
+          totalSales,
+          totalPaid,
+          totalOutstanding: totalSales - totalPaid,
+          count: totalSalesCount
+        },
+        purchases: { totalPurchase, count: totalPurchaseCount },
+        expenses: { totalExpense, count: totalExpenseCount },
         warehouses: totalWarehouses,
         items: totalItems,
         cars: totalCars,
-        lendingAmount: totalLendingAmount || 0,
-        balance: { totalCredit: balanceSums[0]?.totalCredit || 0, totalDebit: balanceSums[0]?.totalDebit || 0 },
-        totalReturn: totalReturn || 0,
-        totalStockout: totalStockout || 0
+        lending: totalLending,
+        balance: {
+          credit: Number(balanceRow.totalCredit) || 0,
+          debit: Number(balanceRow.totalDebit) || 0
+        },
+        returns: totalReturn,
+        stockouts: totalStockout
       },
       recent: {
-        sales: recentSales,
-        purchases: recentPurchases,
-        expenses: recentExpenses
+        sales: recentSales || [],
+        purchases: recentPurchases || [],
+        expenses: recentExpenses || []
       }
     });
+
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch dashboard data", error: err.message });
+    console.error("DASHBOARD ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: "Dashboard failed",
+      error: err.message,
+      summary: { sales: { totalSales: 0 }, purchases: {}, expenses: {} },
+      recent: { sales: [], purchases: [], expenses: [] }
+    });
   }
 };

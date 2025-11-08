@@ -43,11 +43,14 @@ const Sales = sequelize.define("Sales", {
     allowNull:false
   },
   totalPrice: {
-    type:DataTypes.DECIMAL(10, 2),
+    type:DataTypes.DECIMAL(10, 4),
     allowNull:false
   },
+  totalTaxedPrice: {
+    type: DataTypes.DECIMAL(10,4)
+  },
   paidAmount: {
-    type: DataTypes.DECIMAL(10, 2),
+    type: DataTypes.DECIMAL(10, 4),
     allowNull: false
   },
   reciept: {
@@ -66,9 +69,29 @@ const Sales = sequelize.define("Sales", {
     type: DataTypes.INTEGER,
     allowNull: true
   },
+  bonusAmount:{
+    type: DataTypes.DECIMAL(10,2),
+    allowNull: true
+  },
   sponsor: {
     type: DataTypes.INTEGER,
     allowNull: true
+  },
+  sponsurAmount:{
+    type: DataTypes.DECIMAL(10,2),
+    allowNull: true
+  },
+  tinNo:{
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+  fsNo:{
+    type:DataTypes.STRING,
+    allowNull: false
+  },
+  machineNo:{
+    type: DataTypes.STRING,
+    allowNull: false
   },
   description: {
     type: DataTypes.STRING,
@@ -82,9 +105,8 @@ const Sales = sequelize.define("Sales", {
         key: 'id'
     },
     onDelete: 'CASCADE'
-  }
-
-
+  },
+  credit: {type: DataTypes.BOOLEAN, defaultValue: false},
 });
 
 module.exports = Sales;
