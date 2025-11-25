@@ -82,7 +82,7 @@ const Sales = sequelize.define("Sales", {
     allowNull: true
   },
   tinNo:{
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING,
     allowNull: false
   },
   fsNo:{

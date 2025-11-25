@@ -3,7 +3,7 @@ const User = require("../models/user");
 const Sales = require("../models/sales");
 const { Op } = require("sequelize");
 
-// ✅ CREATE FsTable
+
 exports.createFsTable = async (req, res) => {
   try {
     const { userId, machineNo, fsNo } = req.body;
@@ -27,7 +27,6 @@ exports.createFsTable = async (req, res) => {
   }
 };
 
-// ✅ UPDATE FsTable
 exports.updateFsTable = async (req, res) => {
   try {
     const { id } = req.params;
@@ -121,5 +120,41 @@ exports.deleteFsTable = async (req, res) => {
     await t.rollback();
     console.error("Delete FS Error:", error);
     res.status(500).json({ message: "Failed to delete FS record.", error: error.message });
+  }
+};
+
+exports.getFsByUserId = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required." });
+    }
+
+    const fsRecords = await FsTable.findAll({
+      where: { userId },
+      include: [
+        {
+          model: User,
+          attributes: ["id", "fullName", "userName"],
+        },
+      ],
+      order: [["id", "ASC"]],
+    });
+
+    if (!fsRecords || fsRecords.length === 0) {
+      return res.status(404).json({ message: "No FS records found for this user." });
+    }
+
+    return res.status(200).json({
+      message: "FS records retrieved successfully.",
+      data: fsRecords,
+    });
+  } catch (error) {
+    console.error("Error fetching FS by userId:", error);
+    return res.status(500).json({
+      message: "Failed to fetch FS records by userId.",
+      error: error.message,
+    });
   }
 };

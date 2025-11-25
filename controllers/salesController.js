@@ -34,7 +34,9 @@ exports.createSale = async (req, res) => {
     const quantity = req.body.quantity ? Number(req.body.quantity) : null;
     const totalPrice = req.body.totalPrice ? Number(req.body.totalPrice) : null;
     const totalTaxedPrice = req.body.totalTaxedPrice ? Number(req.body.totalTaxedPrice) : null;
-    const paidAmount = req.body.paidAmount ? Number(req.body.paidAmount) : null;
+    const paidAmount = req.body.paidAmount !== undefined && req.body.paidAmount !== null
+    ? Number(req.body.paidAmount)
+    : null;
     const bank = req.body.bank || null;
     const salesDate = req.body.salesDate ? new Date(req.body.salesDate) : new Date();
     const bonus = req.body.bonus ? Number(req.body.bonus) : null;
@@ -59,11 +61,15 @@ exports.createSale = async (req, res) => {
 
 
     // Validate required fields
-    if (!userId || !itemId || !warehouseId || !quantity || !totalPrice || !paidAmount || !tinNo || !fsNo || !machineNo) {
-      return res.status(400).json({
-        message: "Missing required fields: userId, itemId, warehouseId, quantity, totalPrice, paidAmount, tinNo, fsNo, or machineNo.",
-      });
-    }
+if (
+  userId === null || itemId === null || warehouseId === null ||
+  quantity === null || totalPrice === null || paidAmount === null ||
+  tinNo === null || !fsNo || !machineNo
+) {
+  return res.status(400).json({
+    message: "Missing required fields: userId, itemId, warehouseId, quantity, totalPrice, paidAmount, tinNo, fsNo, or machineNo.",
+  });
+}
 
     // Validate related entities
     const user = await User.findByPk(userId);
@@ -340,7 +346,7 @@ const { Op } = require("sequelize");
 
 exports.getSalesReportByDateRange = async (req, res) => {
   try {
-    const { startDate, endDate, userId, customerId, itemId, warehouseId } = req.body;
+    const { startDate, endDate, userId, itemId, warehouseId } = req.body;
 
     // --- Filters ---
     const filterByDate = (field) =>
@@ -349,7 +355,6 @@ exports.getSalesReportByDateRange = async (req, res) => {
     const salesFilter = {};
     if (filterByDate("salesDate")) salesFilter.salesDate = filterByDate("salesDate");
     if (userId) salesFilter.userId = userId;
-    if (customerId) salesFilter.customerId = customerId;
     if (itemId) salesFilter.itemId = itemId;
     if (warehouseId) salesFilter.warehouseId = warehouseId;
 

@@ -3,18 +3,38 @@ const Customer = require("../models/customer");
 // CREATE a new customer
 exports.createCustomer = async (req, res) => {
   try {
-    const { name, tinNumber, type, phoneNumber, address } = req.body;
+    let { name, tinNumber, type, phoneNumber, address } = req.body;
 
-    if (!name) return res.status(400).json({ message: "Name is required" });
-    if (!type || !['supplier','customer'].includes(type)) 
+    // Validate required fields
+    if (!name) {
+      return res.status(400).json({ message: "Name is required" });
+    }
+    if (!type || !['supplier', 'customer'].includes(type)) {
       return res.status(400).json({ message: "Type must be 'supplier' or 'customer'" });
+    }
 
-    const customer = await Customer.create({ name, tinNumber, type, phoneNumber, address });
+    // 🔒 Ensure tinNumber is stored as string (preserves leading zeros)
+    if (tinNumber !== undefined && tinNumber !== null) {
+      tinNumber = tinNumber.toString().trim();
+    }
+
+    const customer = await Customer.create({
+      name,
+      tinNumber,
+      type,
+      phoneNumber,
+      address
+    });
+
     res.status(201).json(customer);
   } catch (error) {
-    res.status(500).json({ message: "Failed to create customer", error: error.message });
+    res.status(500).json({
+      message: "Failed to create customer",
+      error: error.message,
+    });
   }
 };
+
 
 // GET all customers
 exports.getAllCustomers = async (req, res) => {
