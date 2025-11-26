@@ -246,6 +246,16 @@ Purchase.belongsTo(Item, { foreignKey: "itemId" });
 Warehouse.hasMany(Purchase, { foreignKey: "warehouseId", onDelete: "CASCADE" });
 Purchase.belongsTo(Warehouse, { foreignKey: "warehouseId" });
 
+// ====================== BALANCE SHEET RELATIONSHIPS ======================
+
+// CUSTOMER ↔ BALANCE SHEET
+Customer.hasMany(BalanceSheet, {foreignKey: 'customerId',});
+BalanceSheet.belongsTo(Customer, {foreignKey: 'customerId',});
+
+// ITEM ↔ BALANCE SHEET (optional relationship)
+Item.hasMany(BalanceSheet, {foreignKey: 'itemId',});
+BalanceSheet.belongsTo(Item, {foreignKey: 'itemId',});
+
 // ====================== EXPORT ======================
 module.exports = {
   Category,

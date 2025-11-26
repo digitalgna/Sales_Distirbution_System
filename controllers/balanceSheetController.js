@@ -1,17 +1,22 @@
 const BalanceSheet = require("../models/BalanceSheet");
+const Customer = require("../models/customer");
+const Item = require("../models/item");
 
 // CREATE a new BalanceSheet entry
 exports.createBalanceSheet = async (req, res) => {
   try {
-    const { agentName, date, invoiceAmount, bankDeposit, withHold, adjustment, endingBalance } = req.body;
+    const { agentName, customerId, itemId, date, invoiceAmount, bankDeposit, withHold, adjustment, endingBalance, type } = req.body;
     const balanceSheet = await BalanceSheet.create({
-      agentName,
+      agentName: agentName || 'Seblu Deresse Mekonnen',
+      customerId,
+      itemId,
       date,
-      invoiceAmount,
-      bankDeposit,
-      withHold,
-      adjustment,
-      endingBalance,
+      invoiceAmount: invoiceAmount || 0,
+      bankDeposit: bankDeposit || 0,
+      withHold: withHold || 0,
+      adjustment: adjustment || 0,
+      endingBalance: endingBalance || 0,
+      type: type || 'debit'
     });
 
     res.status(201).json(balanceSheet);
@@ -23,7 +28,12 @@ exports.createBalanceSheet = async (req, res) => {
 // READ all BalanceSheet entries
 exports.getAllBalanceSheets = async (req, res) => {
   try {
-    const sheets = await BalanceSheet.findAll();
+    const sheets = await BalanceSheet.findAll({
+      include: [
+        { model: Customer, attributes: ["id", "name"] },
+        { model: Item,  attributes: ["id", "name"] }
+      ]
+    });
     res.status(200).json(sheets);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -33,7 +43,12 @@ exports.getAllBalanceSheets = async (req, res) => {
 // READ a single BalanceSheet entry by id
 exports.getBalanceSheetById = async (req, res) => {
   try {
-    const sheet = await BalanceSheet.findByPk(req.params.id);
+    const sheet = await BalanceSheet.findByPk(req.params.id, {
+      include: [
+        { model: Customer, attributes: ["id", "name"] },
+        { model: Item,  attributes: ["id", "name"] }
+      ]
+    });
     if (!sheet) return res.status(404).json({ error: "BalanceSheet not found" });
     res.status(200).json(sheet);
   } catch (err) {
@@ -47,7 +62,7 @@ exports.updateBalanceSheet = async (req, res) => {
     const sheet = await BalanceSheet.findByPk(req.params.id);
     if (!sheet) return res.status(404).json({ error: "BalanceSheet not found" });
 
-    const { agentName, date, invoiceAmount, bankDeposit, withHold, adjustment } = req.body;
+    const { agentName, customerId, itemId, date, invoiceAmount, bankDeposit, withHold, adjustment, type } = req.body;
 
     const endingBalance = (invoiceAmount ?? sheet.invoiceAmount) 
                          - (bankDeposit ?? sheet.bankDeposit)
@@ -56,12 +71,15 @@ exports.updateBalanceSheet = async (req, res) => {
 
     await sheet.update({
       agentName: agentName ?? sheet.agentName,
+      customerId: customerId ?? sheet.customerId,
+      itemId: itemId ?? sheet.itemId,
       date: date ?? sheet.date,
       invoiceAmount: invoiceAmount ?? sheet.invoiceAmount,
       bankDeposit: bankDeposit ?? sheet.bankDeposit,
       withHold: withHold ?? sheet.withHold,
       adjustment: adjustment ?? sheet.adjustment,
       endingBalance,
+      type: type ?? sheet.type
     });
 
     res.status(200).json(sheet);

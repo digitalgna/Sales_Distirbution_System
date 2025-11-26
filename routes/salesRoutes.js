@@ -17,6 +17,6 @@ router.get("/warehouse/:warehouseId", salesController.getSalesByWarehouse);
 router.post("/report", salesController.getSalesReportByDateRange);
 
 router.post("/user/:userId/filter", salesController.getSalesBySalesmanFiltered);
-
+router.post('/filter', salesController.getFilteredSales);
 
 module.exports = router;

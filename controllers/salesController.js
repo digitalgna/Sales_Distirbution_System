@@ -343,7 +343,6 @@ exports.getSalesByWarehouse = async (req, res) => {
 
 const { Op } = require("sequelize");
 
-
 exports.getSalesReportByDateRange = async (req, res) => {
   try {
     const { startDate, endDate, userId, itemId, warehouseId } = req.body;
@@ -458,7 +457,6 @@ exports.getSalesReportByDateRange = async (req, res) => {
   }
 };
 
-
 //filters for only salesman
 exports.getSalesBySalesmanFiltered = async (req, res) => {
   try {
@@ -542,5 +540,109 @@ exports.getSalesBySalesmanFiltered = async (req, res) => {
   }
 };
 
+exports.getFilteredSales = async (req, res) => {
+  try {
+    const { 
+      customerId, 
+      credit, // true/false for credit sales
+      startDate, 
+      endDate,
+      page = 1,
+      pageSize = 10
+    } = req.body;
+
+    // Build the where clause
+    const whereClause = {};
+    
+    // Add customer filter if provided
+    if (customerId) {
+      whereClause.customerId = customerId;
+    }
+
+    // Add credit filter if provided
+    if (credit !== undefined) {
+      whereClause.credit = credit === 'true' || credit === true;
+    }
+
+    // Add date range filter
+    if (startDate || endDate) {
+      whereClause.salesDate = {};
+      if (startDate) whereClause.salesDate[Op.gte] = new Date(startDate);
+      if (endDate) {
+        // Include the entire end day
+        const endOfDay = new Date(endDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        whereClause.salesDate[Op.lte] = endOfDay;
+      }
+    }
+
+    // Calculate pagination
+    const offset = (page - 1) * pageSize;
+
+    // Get total count for pagination
+    const totalCount = await Sales.count({ where: whereClause });
+
+    // Get paginated sales with related data
+    const sales = await Sales.findAll({
+      where: whereClause,
+      include: [
+        { 
+          model: Customer, 
+          attributes: ['id', 'name', 'phoneNumber', 'tinNumber', 'type'],
+          required: true
+        },
+        { 
+          model: Item, 
+          attributes: ['id', 'name', 'unit', 'unitPrice', 'salePrice'] 
+        },
+        { 
+          model: User, 
+          attributes: ['id', 'username', 'fullName'] 
+        },
+        { 
+          model: Warehouse, 
+          attributes: ['id', 'name'] 
+        }
+      ],
+      order: [['salesDate', 'DESC']],
+      limit: parseInt(pageSize),
+      offset: offset
+    });
+
+    // Calculate summary
+    const summary = await Sales.findOne({
+      where: whereClause,
+      attributes: [
+        [Sales.sequelize.fn('SUM', Sales.sequelize.col('totalPrice')), 'totalSales'],
+        [Sales.sequelize.fn('SUM', Sales.sequelize.col('paidAmount')), 'totalPaid'],
+        [Sales.sequelize.fn('COUNT', Sales.sequelize.col('id')), 'totalTransactions']
+      ],
+      raw: true
+    });
+
+    res.status(200).json({
+      success: true,
+      count: sales.length,
+      total: totalCount,
+      page: parseInt(page),
+      pages: Math.ceil(totalCount / pageSize),
+      summary: {
+        totalSales: parseFloat(summary.totalSales) || 0,
+        totalPaid: parseFloat(summary.totalPaid) || 0,
+        totalCredit: (parseFloat(summary.totalSales) || 0) - (parseFloat(summary.totalPaid) || 0),
+        totalTransactions: parseInt(summary.totalTransactions) || 0
+      },
+      data: sales
+    });
+
+  } catch (error) {
+    console.error('Error fetching filtered sales:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error fetching sales data',
+      error: error.message 
+    });
+  }
+};
 
 
