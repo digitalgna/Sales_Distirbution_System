@@ -1,15 +1,22 @@
-const { Op, Sequelize } = require("sequelize");
+const { Op, Sequelize, literal, fn, col } = require("sequelize");
+const sequelize = require("../config/db.js");
+
+// Models
 const Sales = require("../models/sales");
+const SalesItem = require("../models/salesItem");
+const Customer = require("../models/customer");
+const Warehouse = require("../models/wharehouse");
+const Stockout = require("../models/stockout");
+const StockoutItem = require("../models/stockoutItem");
+const Lending = require("../models/lending");
+const Return = require("../models/return");
+const Item = require("../models/item");
 const Purchase = require("../models/purchase");
 const Expense = require("../models/expense");
-const Item = require("../models/item");
-const Warehouse = require("../models/wharehouse");
 const Car = require("../models/carInfo");
-const Lending = require("../models/lending");
 const Balance = require("../models/balance");
-const Return = require("../models/return");
-const Stockout = require("../models/stockout");
 const User = require("../models/user");
+
 
 exports.getDashboard = async (req, res) => {
   try {
@@ -62,17 +69,22 @@ exports.getDashboard = async (req, res) => {
     }))[0] || { totalCredit: 0, totalDebit: 0 };
 
     // RECENT RECORDS
-    const recentSales = await Sales.findAll({
-      where: salesWhere,
-      order: [["salesDate", "DESC"]],
-      limit: 10,
-      attributes: ["id", "userId", "itemId", "quantity", "totalPrice", "salesDate", "fsNo"],
-      include: [
-        { model: Item, attributes: ["name"] },
-        { model: User, attributes: ["fullName"] }
-      ],
-      raw: true
-    });
+const recentSales = await Sales.findAll({
+  where: salesWhere,
+  order: [["salesDate", "DESC"]],
+  limit: 10,
+  attributes: ["id", "userId", "totalPrice", "salesDate", "fsNo"],
+  include: [
+    { model: User, attributes: ["fullName"] },
+    {
+      model: SalesItem,
+      attributes: ["quantity", "unitPrice", "totalPrice"],
+      include: [{ model: Item, attributes: ["name"] }]
+    }
+  ],
+  raw: false
+});
+
 
     const recentPurchases = await Purchase.findAll({
       where: purchaseWhere,
@@ -130,3 +142,96 @@ exports.getDashboard = async (req, res) => {
     });
   }
 };
+
+
+exports.getSalesDashboard = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // ---- 1. Total Sales Summary ----
+    const sales = await Sales.findAll({
+      where: { userId },
+      include: [
+        { model: Customer, attributes: ["id", "name"] },
+        { model: Warehouse, attributes: ["id", "name"] },
+        {
+          model: SalesItem,
+          include: [{ model: Item, attributes: ["id", "name"] }],
+        },
+      ],
+      order: [["salesDate", "DESC"]],
+    });
+
+    // ---- 2. Total Stockouts ----
+    const stockouts = await Stockout.findAll({
+      where: { userId },
+      include: [
+        { model: Warehouse, attributes: ["id", "name"] },
+        {
+          model: StockoutItem,
+          include: [{ model: Item, attributes: ["id", "name"] }],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    // ---- 3. Returns ----
+    const returns = await Return.findAll({
+      where: { userId },
+      include: [
+        { model: Item, attributes: ["id", "name"] },
+        { model: Warehouse, attributes: ["id", "name"] }
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    // ---- 4. Lending ----
+    const lendings = await Lending.findAll({
+      where: { userId },
+      include: [
+        { model: Customer, attributes: ["id", "name"] },
+        { model: Item, attributes: ["id", "name"] },
+        { model: Warehouse, attributes: ["id", "name"] }
+      ],
+      order: [["lendingDate", "DESC"]],
+    });
+
+    // ---- 5. Dashboard Metrics ----
+    const totalSalesAmount = sales.reduce((sum, s) => sum + Number(s.paidAmount), 0);
+    const totalCreditSales = sales.filter(s => s.credit).length;
+    const itemsSoldCount = sales.reduce((sum, s) => {
+      return sum + s.SalesItems.reduce((x, item) => x + Number(item.quantity), 0);
+    }, 0);
+
+    const totalStockoutItems = stockouts.reduce((sum, item) => {
+      return sum + item.StockoutItems.reduce((x, row) => x + Number(row.amount), 0);
+    }, 0);
+
+    const totalReturnCount = returns.length;
+
+    const totalLendingCount = lendings.length;
+
+    // ---- 6. Final Structured Response ----
+    return res.json({
+      status: true,
+      message: "Sales dashboard data fetched",
+      metrics: {
+        totalSalesAmount,
+        totalCreditSales,
+        itemsSoldCount,
+        totalStockoutItems,
+        totalReturnCount,
+        totalLendingCount,
+      },
+      recentSales: sales.slice(0, 10),
+      recentStockouts: stockouts.slice(0, 10),
+      recentReturns: returns.slice(0, 10),
+      recentLendings: lendings.slice(0, 10),
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ status: false, message: "Server Error", error });
+  }
+};
+

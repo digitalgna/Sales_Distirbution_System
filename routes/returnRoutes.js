@@ -5,8 +5,11 @@ const returnController = require("../controllers/returnController");
 // CRUD routes
 router.post("/", returnController.createReturn);
 router.get("/", returnController.getReturns);
-router.get("/:id", returnController.getReturnById);
+
+// Important: specific route must be BEFORE dynamic :id
 router.get("/user/:userId", returnController.getReturnsByUserId);
+
+router.get("/:id", returnController.getReturnById);
 router.put("/:id", returnController.updateReturn);
 router.delete("/:id", returnController.deleteReturn);
 

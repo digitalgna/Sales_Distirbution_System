@@ -8,68 +8,172 @@ const Car = require("../models/carInfo");
 const { Op } = require("sequelize");
 
 
+const StockoutItem = require("../models/stockoutItem");
+
 exports.createStockout = async (req, res) => {
   const t = await sequelize.transaction();
 
   try {
-    const { itemId, carId, userId, warehouseId, amount, sponsor, bonus, status } = req.body;
-    const store = await Store.findOne({
-      where: { itemId, warehouseId },
-      transaction: t,
-    });
-
-    if (!store) {
-      await t.rollback();
-      return res.status(404).json({ message: "Item not found in this warehouse store" });
+    const { carId, userId, warehouseId, status, items } = req.body;
+    
+    // Validate required fields
+    if (!carId || !userId || !warehouseId || !items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ 
+        message: "carId, userId, warehouseId, and items array with at least one item are required" 
+      });
     }
 
-    if (store.quantity < amount) {
-      await t.rollback();
-      return res.status(400).json({ message: "Insufficient stock in store" });
+    // First, validate all items before making any changes
+    for (const item of items) {
+      const { itemId, amount } = item;
+      
+      if (!itemId || !amount) {
+        return res.status(400).json({ 
+          message: "Each item must have itemId and amount" 
+        });
+      }
+
+      const store = await Store.findOne({
+        where: { itemId, warehouseId },
+        transaction: t,
+      });
+
+      if (!store) {
+        return res.status(404).json({ 
+          message: `Item with ID ${itemId} not found in warehouse store` 
+        });
+      }
+
+      if (store.quantity < amount) {
+        return res.status(400).json({ 
+          message: `Insufficient stock for item ID ${itemId}. Available: ${store.quantity}, Requested: ${amount}` 
+        });
+      }
     }
 
+    // If we get here, all validations passed - now create the records
     const stockout = await Stockout.create(
       {
-        itemId,
         carId,
         userId,
         warehouseId,
-        amount,
-        sponsor,
-        bonus,
         status: status || "pending",
       },
       { transaction: t }
     );
 
-    if (status === "approved") {
-      store.quantity = parseInt(store.quantity) - parseInt(amount);
-      await store.save({ transaction: t });
+    // Process each item in the stockout
+    for (const item of items) {
+      const { itemId, amount, bonus = 0, sponsor } = item;
+      
+      // Create stockout item
+      await StockoutItem.create(
+        {
+          stockoutId: stockout.id,
+          itemId,
+          amount,
+          bonus: parseInt(bonus) || 0,
+          sponsor: parseInt(sponsor) || 0,
+        },
+        { transaction: t }
+      );
+
+      // Update stock if status is approved
+      if (status === "approved") {
+        await Store.decrement('quantity', {
+          by: amount,
+          where: { itemId, warehouseId },
+          transaction: t
+        });
+      }
     }
 
     await t.commit();
-    res.status(201).json(stockout);
-  } catch (error) {
-    await t.rollback();
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// Get all stockouts
-exports.getAllStockouts = async (req, res) => {
-  try {
-    const stockouts = await Stockout.findAll({
+    
+    // Fetch the created stockout with its items for the response
+    const createdStockout = await Stockout.findByPk(stockout.id, {
+        attributes: { 
+        exclude: ['createdAt', 'updatedAt', 'itemId', 'Item'] 
+      },
       include: [
         { model: Item, attributes: ["id", "name"] },
         { model: Warehouse, attributes: ["id", "name"] },
         { model: Car, attributes: ["id", "carPlate"] },
         { model: User, attributes: ["id", "fullName"] },
+        { 
+          model: StockoutItem, 
+          include: [
+            { model: Item, attributes: ["id", "name"] }
+          ] 
+        }
+      ]
+    });
+
+    return res.status(201).json(createdStockout);
+  } catch (error) {
+    if (t && !t.finished) {
+      await t.rollback();
+    }
+    console.error("Error creating stockout:", error);
+    return res.status(500).json({ 
+      message: "Failed to create stockout",
+      error: error.message 
+    });
+  }
+};
+
+// Get all stockouts
+// Get all stockouts
+exports.getAllStockouts = async (req, res) => {
+  try {
+    const stockouts = await Stockout.findAll({
+      attributes: { 
+        exclude: ['createdAt', 'updatedAt', 'itemId'] 
+      },
+      include: [
+        { 
+          model: Warehouse, 
+          attributes: ["id", "name"] 
+        },
+        { 
+          model: Car, 
+          attributes: ["id", "carPlate"] 
+        },
+        { 
+          model: User, 
+          attributes: ["id", "fullName"] 
+        },
+        { 
+          model: StockoutItem, 
+          attributes: { 
+            exclude: ['createdAt', 'updatedAt', 'itemId'] 
+          },
+          include: [
+            { 
+              model: Item, 
+              attributes: ["id", "name"] 
+            }
+          ] 
+        }
       ],
       order: [["createdAt", "DESC"]],
     });
-    res.status(200).json(stockouts);
+
+    // Remove null values from the response
+    const cleanStockouts = stockouts.map(stockout => {
+      const cleanStockout = stockout.get({ plain: true });
+      return JSON.parse(JSON.stringify(cleanStockout, (key, value) => 
+        value === null ? undefined : value
+      ));
+    });
+
+    res.status(200).json(cleanStockouts);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error fetching stockouts:", error);
+    res.status(500).json({ 
+      message: "Failed to fetch stockouts",
+      error: error.message 
+    });
   }
 };
 
@@ -77,20 +181,56 @@ exports.getAllStockouts = async (req, res) => {
 exports.getStockoutById = async (req, res) => {
   try {
     const stockout = await Stockout.findByPk(req.params.id, {
+      attributes: { 
+        exclude: ['createdAt', 'updatedAt', 'itemId'] 
+      },
       include: [
-        { model: Item, attributes: ["id", "name"] },
-        { model: Warehouse, attributes: ["id", "name"] },
-        { model: Car, attributes: ["id", "carPlate"] },
-        { model: User,  attributes: ["id", "fullName"] },
-      ],
+        { 
+          model: Warehouse, 
+          attributes: ["id", "name"] 
+        },
+        { 
+          model: Car, 
+          attributes: ["id", "carPlate"] 
+        },
+        { 
+          model: User, 
+          attributes: ["id", "fullName"] 
+        },
+        { 
+          model: StockoutItem, 
+          attributes: { 
+            exclude: ['createdAt', 'updatedAt', 'itemId'] 
+          },
+          include: [
+            { 
+              model: Item, 
+              attributes: ["id", "name"] 
+            }
+          ] 
+        }
+      ]
     });
 
-    if (!stockout) return res.status(404).json({ message: "Stockout not found" });
-    res.status(200).json(stockout);
+    if (!stockout) {
+      return res.status(404).json({ message: "Stockout not found" });
+    }
+
+    // Remove null values from the response
+    const cleanStockout = JSON.parse(JSON.stringify(stockout, (key, value) => 
+      value === null ? undefined : value
+    ));
+
+    res.status(200).json(cleanStockout);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error fetching stockout:", error);
+    res.status(500).json({ 
+      message: "Failed to fetch stockout",
+      error: error.message 
+    });
   }
 };
+
 
 exports.getStockoutsByUserId = async (req, res) => {
   const { userId } = req.params;
@@ -127,19 +267,108 @@ exports.getStockoutsByUserId = async (req, res) => {
 exports.updateStockout = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const stockout = await Stockout.findByPk(req.params.id);
-    if (!stockout) return res.status(404).json({ message: "Stockout not found" });
+    const { id } = req.params;
+    const { items, ...updateData } = req.body;
 
-    if (stockout.status !== "pending") {
-      return res.status(400).json({ message: "Cannot modify approved/rejected stockouts" });
+    // Find the existing stockout with its items
+    const stockout = await Stockout.findByPk(id, {
+      include: [StockoutItem],
+      transaction: t
+    });
+
+    if (!stockout) {
+      return res.status(404).json({ message: "Stockout not found" });
     }
 
-    await stockout.update(req.body, { transaction: t });
+    if (stockout.status !== "pending") {
+      return res.status(400).json({ 
+        message: "Cannot modify approved/rejected stockouts" 
+      });
+    }
+
+    // Update the stockout record
+    await stockout.update(updateData, { transaction: t });
+
+    // If items are provided, update them
+    if (items && Array.isArray(items)) {
+      // Remove existing items
+      await StockoutItem.destroy({
+        where: { stockoutId: id },
+        transaction: t
+      });
+
+      // Create new items
+      for (const item of items) {
+        const { itemId, amount, bonus = 0, sponsor = 0 } = item;
+        
+        if (!itemId || !amount) {
+          await t.rollback();
+          return res.status(400).json({ 
+            message: "Each item must have itemId and amount" 
+          });
+        }
+
+        await StockoutItem.create(
+          {
+            stockoutId: id,
+            itemId,
+            amount,
+            bonus: parseInt(bonus) || 0,
+            sponsor: parseInt(sponsor) || 0,
+          },
+          { transaction: t }
+        );
+      }
+    }
+
     await t.commit();
-    res.json(stockout);
+
+    // Fetch the updated stockout with its items for the response
+    const updatedStockout = await Stockout.findByPk(id, {
+      attributes: { 
+        exclude: ['createdAt', 'updatedAt', 'itemId'] 
+      },
+      include: [
+        { 
+          model: Warehouse, 
+          attributes: ["id", "name"] 
+        },
+        { 
+          model: Car, 
+          attributes: ["id", "carPlate"] 
+        },
+        { 
+          model: User, 
+          attributes: ["id", "fullName"] 
+        },
+        { 
+          model: StockoutItem, 
+          attributes: { 
+            exclude: ['createdAt', 'updatedAt', 'itemId'] 
+          },
+          include: [
+            { 
+              model: Item, 
+              attributes: ["id", "name"] 
+            }
+          ] 
+        }
+      ]
+    });
+
+    // Remove null values from the response
+    const cleanStockout = JSON.parse(JSON.stringify(updatedStockout, (key, value) => 
+      value === null ? undefined : value
+    ));
+
+    res.status(200).json(cleanStockout);
   } catch (error) {
     await t.rollback();
-    res.status(500).json({ message: error.message });
+    console.error("Error updating stockout:", error);
+    res.status(500).json({ 
+      message: "Failed to update stockout",
+      error: error.message 
+    });
   }
 };
 
@@ -160,40 +389,71 @@ exports.updateStockoutStatus = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { status } = req.body; // "approved" or "rejected"
-    const stockout = await Stockout.findByPk(req.params.id);
+    const stockoutId = req.params.id;
 
-    if (!stockout) return res.status(404).json({ message: "Stockout not found" });
+    const stockout = await Stockout.findByPk(stockoutId, {
+      include: [
+        {
+          model: StockoutItem,
+          include: [{ model: Item }]
+        }
+      ],
+      transaction: t
+    });
 
+    if (!stockout) {
+      await t.rollback();
+      return res.status(404).json({ message: "Stockout not found" });
+    }
+
+    // Only pending requests can be processed
     if (stockout.status !== "pending") {
+      await t.rollback();
       return res.status(400).json({ message: "Status already processed" });
     }
 
+    // If approving, validate store quantities and deduct
     if (status === "approved") {
-      const store = await Store.findOne({
-        where: { itemId: stockout.itemId, warehouseId: stockout.warehouseId },
-        transaction: t,
-      });
+      for (const si of stockout.StockoutItems) {
+        const totalOut = (si.amount || 0) + (si.bonus || 0) + (si.sponsor || 0);
 
-      if (!store || store.quantity < stockout.amount) {
-        await t.rollback();
-        return res.status(400).json({ message: "Insufficient stock to approve" });
+        const store = await Store.findOne({
+          where: {
+            itemId: si.itemId,
+            warehouseId: stockout.warehouseId
+          },
+          transaction: t
+        });
+
+        if (!store || store.quantity < totalOut) {
+          await t.rollback();
+          return res.status(400).json({
+            message: `Insufficient stock for item: ${si.Item?.name || si.itemId}`
+          });
+        }
+
+        // Deduct total movement from store
+        store.quantity -= totalOut;
+        await store.save({ transaction: t });
       }
-
-      // Deduct stock
-      store.quantity -= stockout.amount;
-      await store.save({ transaction: t });
     }
 
+    // Update stockout status
     stockout.status = status;
     await stockout.save({ transaction: t });
 
     await t.commit();
-    res.json({ message: `Stockout ${status} successfully`, stockout });
+    res.json({
+      message: `Stockout ${status} successfully`,
+      stockout
+    });
+
   } catch (error) {
     await t.rollback();
     res.status(500).json({ message: error.message });
   }
 };
+
 
 exports.filterStockouts = async (req, res) => {
   try {
@@ -239,13 +499,12 @@ exports.getStockoutReport = async (req, res) => {
     const whereClause = {};
 
     // --- Optional filters ---
-    if (itemId) whereClause.itemId = itemId;
     if (userId) whereClause.userId = userId;
     if (warehouseId) whereClause.warehouseId = warehouseId;
     if (carId) whereClause.carId = carId;
     if (status) whereClause.status = status;
 
-    // --- Optional date filter ---
+    // --- Date filters ---
     if (startDate) {
       const start = new Date(startDate);
       start.setHours(0, 0, 0, 0);
@@ -262,12 +521,23 @@ exports.getStockoutReport = async (req, res) => {
       }
     }
 
-    // --- Fetch stockouts ---
+    // --- Query: filter by itemId inside StockoutItem ---
+    let stockoutItemFilter = {};
+    if (itemId) {
+      stockoutItemFilter.itemId = itemId;
+    }
+
+    // --- Fetch stockouts with their items ---
     const stockouts = await Stockout.findAll({
       where: whereClause,
-      attributes: ["id", "amount", "status", "createdAt"],
+      attributes: ["id", "status", "createdAt"],
       include: [
-        { model: Item, attributes: ["id", "name"] },
+        {
+          model: StockoutItem,
+          where: stockoutItemFilter,
+          required: itemId ? true : false,
+          include: [{ model: Item, attributes: ["id", "name"] }],
+        },
         { model: Warehouse, attributes: ["id", "name"] },
         { model: Car, attributes: ["id", "carPlate"] },
         { model: User, attributes: ["id", "fullName"] },
@@ -277,21 +547,32 @@ exports.getStockoutReport = async (req, res) => {
 
     // --- Compute totals ---
     const totalStockouts = stockouts.length;
-    const totalQuantity = stockouts.reduce(
-      (sum, s) => sum + (Number(s.amount) || 0),
-      0
-    );
 
-    // --- Format response ---
+    const totalQuantity = stockouts.reduce((sum, s) => {
+      return (
+        sum +
+        s.StockoutItems.reduce(
+          (sub, i) => sub + (Number(i.amount) || 0),
+          0
+        )
+      );
+    }, 0);
+
+    // --- Format report structure ---
     const report = stockouts.map((s) => ({
       id: s.id,
-      item: s.Item?.name,
       warehouse: s.Warehouse?.name,
       car: s.Car?.carPlate,
       user: s.User?.fullName,
       status: s.status,
-      amount: s.amount,
       createdAt: s.createdAt,
+      items: s.StockoutItems.map((i) => ({
+        itemId: i.itemId,
+        itemName: i.Item?.name,
+        amount: i.amount,
+        bonus: i.bonus,
+        sponsor: i.sponsor,
+      })),
     }));
 
     res.status(200).json({
@@ -309,4 +590,5 @@ exports.getStockoutReport = async (req, res) => {
     });
   }
 };
+
 

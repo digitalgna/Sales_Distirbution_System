@@ -1,26 +1,15 @@
 const Sales = require("../models/sales");
+const SalesItem = require("../models/salesItem");
 const User = require("../models/user");
 const Customer = require("../models/customer");
 const Item = require("../models/item");
 const Warehouse = require("../models/wharehouse");
+const StockoutItem = require("../models/stockoutItem");
 const Store = require("../models/store");
 const Stockout = require("../models/stockout");
 const Lending = require("../models/lending");
 const Return = require("../models/return");
 
-
-// Helper: build full URLs for reciept files
-const buildFileUrls = (req, files) => {
-  if (!files) return [];
-  if (typeof files === "string") {
-    try {
-      files = JSON.parse(files);
-    } catch {
-      files = [files];
-    }
-  }
-  return files.map(file => `${req.protocol}://${req.get("host")}/uploads/receipts/${file}`);
-};
 
 // Create new sale
 exports.createSale = async (req, res) => {
@@ -28,25 +17,21 @@ exports.createSale = async (req, res) => {
   try {
     // Parse fields safely
     const userId = req.body.userId ? Number(req.body.userId) : null;
-    const itemId = req.body.itemId ? Number(req.body.itemId) : null;
     const warehouseId = req.body.warehouseId ? Number(req.body.warehouseId) : null;
     const customerId = req.body.customerId ? Number(req.body.customerId) : null;
-    const quantity = req.body.quantity ? Number(req.body.quantity) : null;
     const totalPrice = req.body.totalPrice ? Number(req.body.totalPrice) : null;
     const totalTaxedPrice = req.body.totalTaxedPrice ? Number(req.body.totalTaxedPrice) : null;
+    const withholdingAmount = req.body.withholdingAmount ? Number(req.body.withholdingAmount) : null;
     const paidAmount = req.body.paidAmount !== undefined && req.body.paidAmount !== null
-    ? Number(req.body.paidAmount)
-    : null;
+      ? Number(req.body.paidAmount)
+      : null;
     const bank = req.body.bank || null;
     const salesDate = req.body.salesDate ? new Date(req.body.salesDate) : new Date();
-    const bonus = req.body.bonus ? Number(req.body.bonus) : null;
-    const bonusAmount = req.body.bonusAmount ? Number(req.body.bonusAmount) : null;
-    const sponsor = req.body.sponsor ? Number(req.body.sponsor) : null;
-    const sponsurAmount = req.body.sponsurAmount ? Number(req.body.sponsurAmount) : null;
     const description = req.body.description || null;
     const tinNo = req.body.tinNo ? Number(req.body.tinNo) : null;
     const fsNoRaw = req.body.fsNo;
     const machineNoRaw = req.body.machineNo;
+    const items = Array.isArray(req.body.items) ? req.body.items : [];
 
     // sanitize leading/trailing quotes if any
     const fsNo =
@@ -61,70 +46,132 @@ exports.createSale = async (req, res) => {
 
 
     // Validate required fields
-if (
-  userId === null || itemId === null || warehouseId === null ||
-  quantity === null || totalPrice === null || paidAmount === null ||
-  tinNo === null || !fsNo || !machineNo
-) {
-  return res.status(400).json({
-    message: "Missing required fields: userId, itemId, warehouseId, quantity, totalPrice, paidAmount, tinNo, fsNo, or machineNo.",
-  });
-}
+    if (
+      userId === null || warehouseId === null || totalPrice === null || 
+      paidAmount === null || tinNo === null || !fsNo || !machineNo ||
+      !Array.isArray(items) || items.length === 0
+    ) {
+      return res.status(400).json({
+        message: "Missing required fields: userId, warehouseId, items, totalPrice, paidAmount, tinNo, fsNo, or machineNo.",
+      });
+    }
+
+      // Validate items array
+      for (const item of items) {
+        if (!item.itemId || item.quantity === undefined || item.unitPrice === undefined) {
+          return res.status(400).json({
+            message: "Each item must include itemId, quantity, and unitPrice"
+          });
+        }
+      }
 
     // Validate related entities
-    const user = await User.findByPk(userId);
+    const [user, warehouse] = await Promise.all([
+      User.findByPk(userId),
+      Warehouse.findByPk(warehouseId, { transaction: t })
+    ]);
+
     if (!user) return res.status(404).json({ message: "User not found" });
-
-    const item = await Item.findByPk(itemId, { transaction: t });
-    if (!item) return res.status(404).json({ message: "Item not found" });
-
-    const warehouse = await Warehouse.findByPk(warehouseId);
     if (!warehouse) return res.status(404).json({ message: "Warehouse not found" });
 
-    // Check stock
-    const stock = await Stockout.findOne({ where: { itemId, warehouseId }, transaction: t });
-    if (!stock) return res.status(404).json({ message: "No stock found for this item in this warehouse" });
-    if (stock.quantity < quantity) return res.status(400).json({ message: "Insufficient stock" });
+    // Validate all items and check stock
+    const itemIds = items.map(item => item.itemId);
+    const itemsData = await Item.findAll({
+      where: { id: itemIds },
+      transaction: t
+    });
 
-    // Deduct stock
-    stock.quantity -= quantity;
-    await stock.save({ transaction: t });
+    if (itemsData.length !== items.length) {
+      return res.status(404).json({ message: "One or more items not found" });
+    }
 
-    // Handle uploaded receipts
-    let recieptFiles = [];
-    if (req.files && req.files.length > 0) {
-      recieptFiles = req.files.map(f => f.filename);
+    const stocks = await StockoutItem.findAll({
+      where: { 
+        itemId: itemIds,
+      },
+      include: [
+        {
+          model: Stockout,
+          where: { warehouseId, status: 'approved' } // only consider approved stockouts
+        }
+      ],
+      transaction: t
+    });
+
+
+    // Check stock for all items
+    for (const item of items) {
+      const stock = stocks.find(s => s.itemId === item.itemId);
+      if (!stock) {
+        return res.status(404).json({ 
+          message: `No stock found for item ${item.itemId} in this warehouse` 
+        });
+      }
+      if (stock.quantity < item.quantity) {
+        const itemData = itemsData.find(i => i.id === item.itemId);
+        return res.status(400).json({ 
+          message: `Insufficient stock for item ${itemData?.name || item.itemId}. Available: ${stock.quantity}, Requested: ${item.quantity}`
+        });
+      }
     }
 
     // Create sale record
     const sale = await Sales.create({
       userId,
       customerId,
-      itemId,
       warehouseId,
-      quantity,
       totalPrice,
       totalTaxedPrice,
+      withholdingAmount,
       paidAmount,
-      reciept: recieptFiles,
       bank,
       salesDate,
-      bonus,
-      bonusAmount,
-      sponsor,
-      sponsurAmount,
       tinNo,
       fsNo,
       machineNo,
       description
     }, { transaction: t });
 
+    // Create sales items and update stock
+    const salesItems = await Promise.all(items.map(async (item) => {
+      // Deduct stock
+      const stock = stocks.find(s => s.itemId === item.itemId);
+      stock.quantity -= item.quantity;
+      await stock.save({ transaction: t });
+
+      // Calculate total price for the item
+      const itemTotalPrice = item.quantity * item.unitPrice;
+
+      // Create sales item with bonus/sponsor info
+      return SalesItem.create({
+        salesId: sale.id,
+        itemId: item.itemId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: itemTotalPrice,
+        bonus: item.bonus || false,
+        bonusAmount: item.bonusAmount || 0,
+        sponsor: item.sponsor || null,
+        sponsorAmount: item.sponsorAmount || 0
+      }, { transaction: t });
+    }));
+
     await t.commit();
 
-    const saleJson = sale.toJSON();
-    saleJson.reciept = buildFileUrls(req, sale.reciept);
+    // Fetch the complete sale with items
+    const result = await Sales.findByPk(sale.id, {
+      include: [
+        { model: SalesItem, include: [Item] },
+        { model: User, attributes: ['id', 'fullName'] },
+        { model: Customer, attributes: ['id', 'name'] },
+        { model: Warehouse, attributes: ['id', 'name'] }
+      ]
+    });
 
-    res.status(201).json({ message: "Sale created successfully", sale: saleJson });
+    res.status(201).json({ 
+      message: "Sale created successfully", 
+      sale: result.toJSON() 
+    });
 
   } catch (error) {
     await t.rollback();
@@ -140,39 +187,53 @@ exports.getAllSales = async (req, res) => {
       include: [
         { model: User, attributes: ["id", "fullName"] },
         { model: Customer, attributes: ["id", "name"] },
-        { model: Item, attributes: ["id", "name", "unitPrice"] },
+        { model: Warehouse, attributes: ["id", "name"] },
+        {
+          model: SalesItem,
+          include: [
+            { model: Item, attributes: ["id", "name"] }
+          ]
+        }
       ],
+      order: [['createdAt', 'DESC']]
     });
 
-    const formattedSales = sales.map(sale => {
-      const json = sale.toJSON();
-      json.reciept = buildFileUrls(req, json.reciept);
-      return json;
-    });
-
-    res.status(200).json(formattedSales);
+    res.status(200).json(sales);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch sales", error: error.message });
+    console.error("Error fetching sales:", error);
+    res.status(500).json({
+      message: "Failed to fetch sales",
+      error: error.message
+    });
   }
 };
+
 
 // Get sale by ID
 exports.getSaleById = async (req, res) => {
   try {
     const sale = await Sales.findByPk(req.params.id, {
+      attributes: { 
+        exclude: ['itemId', 'bonus', 'bonusAmount', 'sponsor', 'sponsorAmount', 'createdAt', 'updatedAt'] 
+      },
       include: [
         { model: User, attributes: ["id", "fullName"] },
         { model: Customer, attributes: ["id", "name"] },
-        { model: Item, attributes: ["id", "name", "unitPrice"] },
-      ],
+        { model: Warehouse, attributes: ["id", "name"] },
+        {
+          model: SalesItem,
+          include: [
+            { 
+              model: Item, 
+              attributes: ["id", "name", "unitPrice"] 
+            }
+          ]
+        }
+      ]
     });
 
     if (!sale) return res.status(404).json({ message: "Sale not found" });
-
-    const saleJson = sale.toJSON();
-    saleJson.reciept = buildFileUrls(req, saleJson.reciept);
-
-    res.status(200).json(saleJson);
+    res.status(200).json(sale);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch sale", error: error.message });
   }
@@ -183,44 +244,104 @@ exports.updateSale = async (req, res) => {
   const t = await Sales.sequelize.transaction();
   try {
     const { id } = req.params;
-    const sale = await Sales.findByPk(id, { transaction: t });
+    const sale = await Sales.findByPk(id, { 
+      include: [SalesItem],
+      transaction: t 
+    });
     if (!sale) {
       await t.rollback();
       return res.status(404).json({ message: "Sale not found" });
     }
 
-    // === FIX: Clean fsNo, machineNo from double quotes ===
-    const clean = (val) => {
-      if (typeof val !== "string") return val;
-      // Remove leading/trailing quotes: "000987" → 000987
-      return val.replace(/^"|"$/g, "").trim();
-    };
+    // Get all items to update stock
+    const itemIds = [...new Set([...sale.SalesItems.map(si => si.itemId), 
+      ...(req.body.items || []).map(i => i.itemId)])];
+    
+    const stocks = await Stockout.findAll({
+      where: { 
+        itemId: itemIds,
+        warehouseId: sale.warehouseId 
+      },
+      transaction: t
+    });
 
-    // Merge old + new receipts
-    let recieptFiles = Array.isArray(sale.reciept) ? [...sale.reciept] : [];
-    if (req.files?.length > 0) {
-      recieptFiles.push(...req.files.map(f => f.filename));
+    // Restore original stock
+    for (const salesItem of sale.SalesItems) {
+      const stock = stocks.find(s => s.itemId === salesItem.itemId);
+      if (stock) {
+        stock.quantity += salesItem.quantity;
+        await stock.save({ transaction: t });
+      }
     }
 
-    // === UPDATE WITH CLEANED VALUES ===
-    await sale.update(
-      {
-        ...req.body,
-        fsNo: clean(req.body.fsNo) || sale.fsNo,
-        machineNo: clean(req.body.machineNo) || sale.machineNo,
-        tinNo: Number(req.body.tinNo) || sale.tinNo,
-        reciept: recieptFiles,
-        credit: req.body.credit === true || req.body.credit === "true",
-      },
-      { transaction: t }
-    );
+    // Clean and update sale data
+    const clean = (val) => {
+      if (typeof val !== "string") return val;
+      return val.replace(/^"/g, "").replace(/"$/g, "").trim();
+    };
+
+    // Update sale record
+    await sale.update({
+      ...req.body,
+      fsNo: clean(req.body.fsNo) || sale.fsNo,
+      machineNo: clean(req.body.machineNo) || sale.machineNo,
+      tinNo: Number(req.body.tinNo) || sale.tinNo,
+      credit: req.body.credit === true || req.body.credit === "true",
+      totalPrice: req.body.totalPrice || sale.totalPrice,
+      totalTaxedPrice: req.body.totalTaxedPrice || sale.totalTaxedPrice,
+      withholdingAmount: req.body.withholdingAmount || sale.withholdingAmount,
+      paidAmount: req.body.paidAmount !== undefined ? Number(req.body.paidAmount) : sale.paidAmount
+    }, { transaction: t });
+
+    // Delete existing sales items
+    await SalesItem.destroy({
+      where: { salesId: id },
+      transaction: t
+    });
+
+    // Create new sales items if provided
+    if (req.body.items && Array.isArray(req.body.items)) {
+      for (const item of req.body.items) {
+        // Deduct stock
+        const stock = stocks.find(s => s.itemId === item.itemId);
+        if (!stock) {
+          throw new Error(`No stock found for item ${item.itemId}`);
+        }
+        stock.quantity -= item.quantity;
+        if (stock.quantity < 0) {
+          throw new Error(`Insufficient stock for item ${item.itemId}`);
+        }
+        await stock.save({ transaction: t });
+
+        // Create sales item
+        await SalesItem.create({
+          salesId: sale.id,
+          itemId: item.itemId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.quantity * item.unitPrice,
+          bonus: item.bonus || false,
+          bonusAmount: item.bonusAmount || 0,
+          sponsor: item.sponsor || null,
+          sponsorAmount: item.sponsorAmount || 0
+        }, { transaction: t });
+      }
+    }
 
     await t.commit();
 
-    const updated = sale.toJSON();
-    updated.reciept = buildFileUrls(req, updated.reciept);
+    // Fetch the updated sale with items
+    const updatedSale = await Sales.findByPk(id, {
+      include: [
+        { model: SalesItem, include: [Item] },
+        { model: User, attributes: ['id', 'fullName'] },
+        { model: Customer, attributes: ['id', 'name'] },
+        { model: Warehouse, attributes: ['id', 'name'] }
+      ]
+    });
 
-    res.json({ message: "Sale updated!", sale: updated });
+    res.json({ message: "Sale updated!", sale: updatedSale });
+
   } catch (err) {
     await t.rollback();
     console.error("UPDATE ERROR:", err);
@@ -230,13 +351,51 @@ exports.updateSale = async (req, res) => {
 
 // Delete sale
 exports.deleteSale = async (req, res) => {
+  const t = await Sales.sequelize.transaction();
   try {
-    const sale = await Sales.findByPk(req.params.id);
-    if (!sale) return res.status(404).json({ message: "Sale not found" });
+    const sale = await Sales.findByPk(req.params.id, {
+      include: [SalesItem],
+      transaction: t
+    });
+    
+    if (!sale) {
+      await t.rollback();
+      return res.status(404).json({ message: "Sale not found" });
+    }
 
-    await sale.destroy();
+    // Get all items to restore stock
+    const itemIds = sale.SalesItems.map(si => si.itemId);
+    const stocks = await Stockout.findAll({
+      where: { 
+        itemId: itemIds,
+        warehouseId: sale.warehouseId 
+      },
+      transaction: t
+    });
+
+    // Restore stock for each item
+    for (const salesItem of sale.SalesItems) {
+      const stock = stocks.find(s => s.itemId === salesItem.itemId);
+      if (stock) {
+        stock.quantity += salesItem.quantity;
+        await stock.save({ transaction: t });
+      }
+    }
+
+    // Delete sales items
+    await SalesItem.destroy({
+      where: { salesId: sale.id },
+      transaction: t
+    });
+
+    // Delete the sale
+    await sale.destroy({ transaction: t });
+    
+    await t.commit();
     res.status(200).json({ message: "Sale deleted successfully" });
   } catch (error) {
+    await t.rollback();
+    console.error("Delete Sale Error:", error);
     res.status(500).json({ message: "Failed to delete sale", error: error.message });
   }
 };
@@ -248,19 +407,21 @@ exports.getSalesByCustomer = async (req, res) => {
       where: { customerId },
       include: [
         { model: User, attributes: ["id", "fullName"] },
-        { model: Item, attributes: ["id", "name", "unitPrice"] },
         { model: Customer, attributes: ["id", "name"] },
-        { model: Warehouse, attributes: ["id", "name"]},
+        { model: Warehouse, attributes: ["id", "name"] },
+        {
+          model: SalesItem,
+          include: [
+            { 
+              model: Item, 
+              attributes: ["id", "name", "unitPrice", "code"] 
+            }
+          ]
+        }
       ],
     });
 
-    const formatted = sales.map(s => {
-      const json = s.toJSON();
-      json.reciept = buildFileUrls(req, json.reciept);
-      return json;
-    });
-
-    res.status(200).json(formatted);
+    res.status(200).json(sales);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch sales by customer", error: error.message });
   }
@@ -270,22 +431,24 @@ exports.getSalesByItem = async (req, res) => {
   try {
     const itemId = Number(req.params.itemId);
     const sales = await Sales.findAll({
-      where: { itemId },
       include: [
         { model: User, attributes: ["id", "fullName"] },
         { model: Customer, attributes: ["id", "name"] },
-        { model: Item, attributes: ["id", "name", "unitPrice"] },
-        { model: Warehouse, attributes: ["id", "name"]},
+        { model: Warehouse, attributes: ["id", "name"] },
+        {
+          model: SalesItem,
+          where: { itemId },
+          include: [
+            { 
+              model: Item, 
+              attributes: ["id", "name", "unitPrice", "code"] 
+            }
+          ]
+        }
       ],
     });
 
-    const formatted = sales.map(s => {
-      const json = s.toJSON();
-      json.reciept = buildFileUrls(req, json.reciept);
-      return json;
-    });
-
-    res.status(200).json(formatted);
+    res.status(200).json(sales);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch sales by item", error: error.message });
   }
@@ -298,19 +461,21 @@ exports.getSalesBySalesMan = async (req, res) => {
       where: { userId },
       include: [
         { model: Customer, attributes: ["id", "name"] },
-        { model: Item, attributes: ["id", "name", "unitPrice"] },
-        { model: Warehouse, attributes: ["id", "name"]},
+        { model: Warehouse, attributes: ["id", "name"] },
         { model: User, attributes: ["id", "fullName"] },
+        {
+          model: SalesItem,
+          include: [
+            { 
+              model: Item, 
+              attributes: ["id", "name", "unitPrice", "code"] 
+            }
+          ]
+        }
       ],
     });
 
-    const formatted = sales.map(s => {
-      const json = s.toJSON();
-      json.reciept = buildFileUrls(req, json.reciept);
-      return json;
-    });
-
-    res.status(200).json(formatted);
+    res.status(200).json(sales);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch sales by user", error: error.message });
   }
@@ -324,18 +489,20 @@ exports.getSalesByWarehouse = async (req, res) => {
       include: [
         { model: User, attributes: ["id", "fullName"] },
         { model: Customer, attributes: ["id", "name"] },
-        { model: Item, attributes: ["id", "name", "unitPrice"] },
-        { model: Warehouse, attributes: ["id", "name"]},
+        { model: Warehouse, attributes: ["id", "name"] },
+        {
+          model: SalesItem,
+          include: [
+            { 
+              model: Item, 
+              attributes: ["id", "name", "unitPrice", "code"] 
+            }
+          ]
+        }
       ],
     });
 
-    const formatted = sales.map(s => {
-      const json = s.toJSON();
-      json.reciept = buildFileUrls(req, json.reciept);
-      return json;
-    });
-
-    res.status(200).json(formatted);
+    res.status(200).json(sales);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch sales by warehouse", error: error.message });
   }
@@ -354,7 +521,6 @@ exports.getSalesReportByDateRange = async (req, res) => {
     const salesFilter = {};
     if (filterByDate("salesDate")) salesFilter.salesDate = filterByDate("salesDate");
     if (userId) salesFilter.userId = userId;
-    if (itemId) salesFilter.itemId = itemId;
     if (warehouseId) salesFilter.warehouseId = warehouseId;
 
     const movementsFilter = {};
@@ -367,11 +533,23 @@ exports.getSalesReportByDateRange = async (req, res) => {
     const [sales, allStockouts, allLendings, allReturns] = await Promise.all([
       Sales.findAll({
         where: salesFilter,
+        attributes: { 
+          exclude: ['itemId', 'bonus', 'bonusAmount', 'sponsor', 'sponsorAmount', 'createdAt', 'updatedAt'] 
+        },
         include: [
           { model: User, attributes: ["id", "fullName"] },
           { model: Customer, attributes: ["id", "name"] },
-          { model: Item, attributes: ["id", "name", "unitPrice"] },
-          { model: Warehouse, attributes: ["name"] },
+          { model: Warehouse, attributes: ["id", "name"] },
+          {
+            model: SalesItem,
+            include: [
+              { 
+                model: Item, 
+                attributes: ["id", "name", "unitPrice"],
+                where: itemId ? { id: itemId } : undefined
+              }
+            ]
+          }
         ],
         order: [["salesDate", "ASC"]],
       }),
@@ -402,19 +580,47 @@ exports.getSalesReportByDateRange = async (req, res) => {
     ]);
 
     // --- Format sales ---
-    const formattedSales = sales.map(s => {
-      const json = s.toJSON();
-      json.reciept = buildFileUrls(req, json.reciept);
+    const formattedSales = sales.map(sale => {
+      const json = sale.toJSON();
+      
+      // Clean up the response
       delete json.userId;
       delete json.customerId;
-      delete json.itemId;
       delete json.warehouseId;
-      delete json.createdAt;
-      delete json.updatedAt;
-      return json;
+      
+      // Calculate totals from SalesItems
+      const totals = sale.SalesItems.reduce((acc, item) => {
+        const quantity = parseFloat(item.quantity || 0);
+        const totalPrice = parseFloat(item.totalPrice || 0);
+        return {
+          totalQuantity: acc.totalQuantity + quantity,
+          totalPrice: acc.totalPrice + totalPrice
+        };
+      }, { totalQuantity: 0, totalPrice: 0 });
+
+      return {
+        ...json,
+        totalQuantity: totals.totalQuantity,
+        totalPrice: totals.totalPrice.toFixed(4),
+        SalesItems: sale.SalesItems.map(item => {
+          const itemJson = item.toJSON();
+          delete itemJson.salesId;
+          delete itemJson.itemId;
+          return {
+            ...itemJson,
+            totalPrice: parseFloat(itemJson.totalPrice).toFixed(4),
+            unitPrice: parseFloat(itemJson.unitPrice).toFixed(4)
+          };
+        })
+      };
     });
 
-    // --- Format stockouts / lending / returns ---
+    // Calculate grand totals
+    const totalSales = formattedSales.reduce((sum, s) => sum + parseFloat(s.totalPrice || 0), 0);
+    const totalPaid = formattedSales.reduce((sum, s) => sum + parseFloat(s.paidAmount || 0), 0);
+    const totalItemsSold = formattedSales.reduce((sum, s) => sum + (s.totalQuantity || 0), 0);
+
+    // --- Format movements ---
     const formatMovements = (records, type) => records.map(r => ({
       type,
       date: r.createdAt || r.lendingDate || r.returnDate,
@@ -428,19 +634,14 @@ exports.getSalesReportByDateRange = async (req, res) => {
     const lendings = formatMovements(allLendings, "lending");
     const returns = formatMovements(allReturns, "return");
 
-    // --- Totals for sales ---
-    const totalSales = sales.reduce((sum, s) => sum + parseFloat(s.totalPrice || 0), 0);
-    const totalPaid = sales.reduce((sum, s) => sum + parseFloat(s.paidAmount || 0), 0);
-    const totalItemsSold = sales.reduce((sum, s) => sum + parseInt(s.quantity || 0), 0);
-
     // --- Totals for movements ---
-    const totalStockout = stockouts.reduce((sum, s) => sum + s.quantity, 0);
-    const totalLending = lendings.reduce((sum, l) => sum + l.quantity, 0);
-    const totalReturn = returns.reduce((sum, r) => sum + r.quantity, 0);
+    const totalStockout = stockouts.reduce((sum, s) => sum + (s.quantity || 0), 0);
+    const totalLending = lendings.reduce((sum, l) => sum + (l.quantity || 0), 0);
+    const totalReturn = returns.reduce((sum, r) => sum + (r.quantity || 0), 0);
 
     res.status(200).json({
-      totalSales,
-      totalPaid,
+      totalSales: totalSales.toFixed(4),
+      totalPaid: totalPaid.toFixed(4),
       totalItemsSold,
       salesCount: formattedSales.length,
       totalStockout,
@@ -453,7 +654,11 @@ exports.getSalesReportByDateRange = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({ message: "Failed to generate sales report", error: error.message });
+    console.error("Error generating sales report:", error);
+    res.status(500).json({ 
+      message: "Failed to generate sales report", 
+      error: error.message 
+    });
   }
 };
 
@@ -512,23 +717,17 @@ exports.getSalesBySalesmanFiltered = async (req, res) => {
       order: [["salesDate", "DESC"]],
     });
 
-    const formatted = sales.map(s => {
-      const json = s.toJSON();
-      json.reciept = buildFileUrls(req, json.reciept);
-      return json;
-    });
-
     const totalSales = sales.reduce((s, x) => s + Number(x.totalPrice || 0), 0);
     const totalPaid = sales.reduce((s, x) => s + Number(x.paidAmount || 0), 0);
 
     res.status(200).json({
       salesmanId: userId,
       filters: req.body,
-      count: formatted.length,
+      count: sales.length,
       totalSales: Number(totalSales.toFixed(2)),
       totalPaid: Number(totalPaid.toFixed(2)),
       outstanding: Number((totalSales - totalPaid).toFixed(2)),
-      sales: formatted
+      sales: sales
     });
 
   } catch (error) {

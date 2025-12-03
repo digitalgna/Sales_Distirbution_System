@@ -42,25 +42,25 @@ const BalanceSheet = sequelize.define("BalanceSheet", {
   },
   bankDeposit: {
     type: DataTypes.DECIMAL(14, 4),
-    allowNull: false,
+    allowNull: true,
   },
   withHold: {
     type: DataTypes.DECIMAL(14, 4),
-    allowNull: false,
+    allowNull: true,
   },
   adjustment: {
     type: DataTypes.DECIMAL(14, 4),
     allowNull: true,
     defaultValue: 0.0,
   },
-  endingBalance: {
-    type: DataTypes.DECIMAL(14, 4),
-    allowNull: false,
+  minusedFromDept: {
+    type: DataTypes.DECIMAL(12,2),
+    allowNul: true
   },
-  type: {
-    type: DataTypes.ENUM('debit', 'credit'),
-    allowNull: true
-  }
+  minusedReason: {
+    type:DataTypes.STRING,
+    alowNull: true
+  },
 }, {
   tableName: "balance_sheets",  // optional, for consistent naming
   timestamps: false,            // unless you want createdAt/updatedAt

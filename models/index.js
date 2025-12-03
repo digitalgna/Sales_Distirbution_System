@@ -18,6 +18,10 @@ const Store = require("./store.js");
 const Warehouse = require("./wharehouse");
 const FsTable = require("./FSMachine.js");
 const BalanceSheet = require("./BalanceSheet.js");
+const SalesItem = require("./salesItem.js");
+const PurchaseItem = require("./purchaseItem.js");
+const StockoutItem = require("./stockoutItem.js");
+const ReturnItem = require("./returnItem.js");
 
 // Define associations
 
@@ -165,6 +169,13 @@ Item.hasMany(Purchase, { foreignKey: "itemId", onDelete: "CASCADE" });
 Purchase.belongsTo(Warehouse, { foreignKey: "warehouseId", onDelete: "CASCADE" });
 Warehouse.hasMany(Purchase, { foreignKey: "warehouseId", onDelete: "CASCADE" });
 
+// Purchase and PurchaseItem associations
+Purchase.hasMany(PurchaseItem, { foreignKey: 'purchaseId', onDelete: 'CASCADE' });
+PurchaseItem.belongsTo(Purchase, { foreignKey: 'purchaseId' });
+
+// PurchaseItem and Item associations
+PurchaseItem.belongsTo(Item, { foreignKey: 'itemId' });
+Item.hasMany(PurchaseItem, { foreignKey: 'itemId' });
 
 // Item belongs to a Category
 Item.belongsTo(Category, { foreignKey: "categoryId", onDelete: "CASCADE" });
@@ -195,6 +206,10 @@ User.hasMany(Stockout, { foreignKey: "userId", onDelete: "CASCADE" });
 //  Stockout → Car
 Stockout.belongsTo(Car, { foreignKey: "carId", onDelete: "CASCADE" });
 Car.hasMany(Stockout, { foreignKey: "carId", onDelete: "CASCADE" });
+
+//Purchase → Car
+Purchase.belongsTo(Car, { foreignKey: "carId", onDelete: "CASCADE" });
+Car.hasMany(Purchase, { foreignKey: "carId", onDelete: "CASCADE" });
 
 
 // ====================== INVENTORY RELATIONSHIPS ======================
@@ -256,14 +271,44 @@ BalanceSheet.belongsTo(Customer, {foreignKey: 'customerId',});
 Item.hasMany(BalanceSheet, {foreignKey: 'itemId',});
 BalanceSheet.belongsTo(Item, {foreignKey: 'itemId',});
 
+// Define associations
+Sales.hasMany(SalesItem, { foreignKey: 'salesId' });
+SalesItem.belongsTo(Sales, { foreignKey: 'salesId' });
+
+Item.hasMany(SalesItem, { foreignKey: 'itemId' });
+SalesItem.belongsTo(Item, { foreignKey: 'itemId' });
+
+// Define associations
+Purchase.hasMany(PurchaseItem, { foreignKey: 'purchaseId' });
+PurchaseItem.belongsTo(Purchase, { foreignKey: 'purchaseId' });
+
+PurchaseItem.belongsTo(Item, { foreignKey: 'itemId' });
+Item.hasMany(PurchaseItem, { foreignKey: 'itemId' });
+
+// Stockout -> StockoutItem
+Stockout.hasMany(StockoutItem, { foreignKey: "stockoutId", onDelete: "CASCADE" });
+StockoutItem.belongsTo(Stockout, { foreignKey: "stockoutId" });
+
+// StockoutItem -> Item
+Item.hasMany(StockoutItem, { foreignKey: "itemId", onDelete: "CASCADE" });
+StockoutItem.belongsTo(Item, { foreignKey: "itemId" });
+
+Return.hasMany(ReturnItem, { foreignKey: "ReturnId", onDelete: "CASCADE" });
+ReturnItem.belongsTo(Return, { foreignKey: "ReturnId" });
+
+Item.hasMany(ReturnItem, { foreignKey: "itemId", onDelete: "CASCADE" });
+ReturnItem.belongsTo(Item, { foreignKey: "itemId" });
+
 // ====================== EXPORT ======================
 module.exports = {
   Category,
   Item,
   Warehouse,
   Stockout,
+  StockoutItem,
   Store,
   Return,
+  ReturnItem,
   Purchase,
-  sequelize, User, Role, Permission, Customer, Balance, Car, CarOperation, Sales, Lending, Expense, FsTable, BalanceSheet
+  sequelize, User, Role, Permission, Customer, Balance, Car, CarOperation, Sales, Lending, Expense, FsTable, BalanceSheet, PurchaseItem
 };

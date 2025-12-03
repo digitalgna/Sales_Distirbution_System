@@ -29,19 +29,6 @@ const Sales = sequelize.define("Sales", {
     },
     onDelete: 'CASCADE'
   },
-  itemId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-        model: Item,
-        key: 'id'
-    },
-    onDelete: 'CASCADE'
-  },
-  quantity:{
-    type: DataTypes.INTEGER,
-    allowNull:false
-  },
   totalPrice: {
     type:DataTypes.DECIMAL(10, 4),
     allowNull:false
@@ -49,12 +36,9 @@ const Sales = sequelize.define("Sales", {
   totalTaxedPrice: {
     type: DataTypes.DECIMAL(10,4)
   },
+  withholdingAmount: { type: DataTypes.DECIMAL(12,2), defaultValue: 0, allowNull: false },
   paidAmount: {
     type: DataTypes.DECIMAL(10, 4),
-    allowNull: false
-  },
-  reciept: {
-    type: DataTypes.JSON,
     allowNull: false
   },
   bank: {
@@ -64,22 +48,6 @@ const Sales = sequelize.define("Sales", {
   salesDate: {
     type: DataTypes.DATE,
     allowNull:false
-  },
-  bonus: {
-    type: DataTypes.INTEGER,
-    allowNull: true
-  },
-  bonusAmount:{
-    type: DataTypes.DECIMAL(10,2),
-    allowNull: true
-  },
-  sponsor: {
-    type: DataTypes.INTEGER,
-    allowNull: true
-  },
-  sponsurAmount:{
-    type: DataTypes.DECIMAL(10,2),
-    allowNull: true
   },
   tinNo:{
     type: DataTypes.STRING,
