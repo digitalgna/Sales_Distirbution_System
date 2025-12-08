@@ -9,168 +9,171 @@ const Store = require("../models/store");
 const Stockout = require("../models/stockout");
 const Lending = require("../models/lending");
 const Return = require("../models/return");
+const ReturnItem = require("../models/returnItem");
+const FSMachine = require("../models/FSMachine");
 
 
 // Create new sale
 exports.createSale = async (req, res) => {
   const t = await Sales.sequelize.transaction();
   try {
-    // Parse fields safely
-    const userId = req.body.userId ? Number(req.body.userId) : null;
-    const warehouseId = req.body.warehouseId ? Number(req.body.warehouseId) : null;
-    const customerId = req.body.customerId ? Number(req.body.customerId) : null;
-    const totalPrice = req.body.totalPrice ? Number(req.body.totalPrice) : null;
-    const totalTaxedPrice = req.body.totalTaxedPrice ? Number(req.body.totalTaxedPrice) : null;
-    const withholdingAmount = req.body.withholdingAmount ? Number(req.body.withholdingAmount) : null;
-    const paidAmount = req.body.paidAmount !== undefined && req.body.paidAmount !== null
-      ? Number(req.body.paidAmount)
-      : null;
-    const bank = req.body.bank || null;
-    const salesDate = req.body.salesDate ? new Date(req.body.salesDate) : new Date();
-    const description = req.body.description || null;
-    const tinNo = req.body.tinNo ? Number(req.body.tinNo) : null;
-    const fsNoRaw = req.body.fsNo;
-    const machineNoRaw = req.body.machineNo;
-    const items = Array.isArray(req.body.items) ? req.body.items : [];
-
-    // sanitize leading/trailing quotes if any
-    const fsNo =
-      typeof fsNoRaw === "string"
-        ? fsNoRaw.replace(/^"+|"+$/g, "")
-        : fsNoRaw || null;
-
-    const machineNo =
-      typeof machineNoRaw === "string"
-        ? machineNoRaw.replace(/^"+|"+$/g, "")
-        : machineNoRaw || null;
-
-
-    // Validate required fields
-    if (
-      userId === null || warehouseId === null || totalPrice === null || 
-      paidAmount === null || tinNo === null || !fsNo || !machineNo ||
-      !Array.isArray(items) || items.length === 0
-    ) {
-      return res.status(400).json({
-        message: "Missing required fields: userId, warehouseId, items, totalPrice, paidAmount, tinNo, fsNo, or machineNo.",
-      });
-    }
-
-      // Validate items array
-      for (const item of items) {
-        if (!item.itemId || item.quantity === undefined || item.unitPrice === undefined) {
-          return res.status(400).json({
-            message: "Each item must include itemId, quantity, and unitPrice"
-          });
-        }
-      }
-
-    // Validate related entities
-    const [user, warehouse] = await Promise.all([
-      User.findByPk(userId),
-      Warehouse.findByPk(warehouseId, { transaction: t })
-    ]);
-
-    if (!user) return res.status(404).json({ message: "User not found" });
-    if (!warehouse) return res.status(404).json({ message: "Warehouse not found" });
-
-    // Validate all items and check stock
-    const itemIds = items.map(item => item.itemId);
-    const itemsData = await Item.findAll({
-      where: { id: itemIds },
-      transaction: t
-    });
-
-    if (itemsData.length !== items.length) {
-      return res.status(404).json({ message: "One or more items not found" });
-    }
-
-    const stocks = await StockoutItem.findAll({
-      where: { 
-        itemId: itemIds,
-      },
-      include: [
-        {
-          model: Stockout,
-          where: { warehouseId, status: 'approved' } // only consider approved stockouts
-        }
-      ],
-      transaction: t
-    });
-
-
-    // Check stock for all items
-    for (const item of items) {
-      const stock = stocks.find(s => s.itemId === item.itemId);
-      if (!stock) {
-        return res.status(404).json({ 
-          message: `No stock found for item ${item.itemId} in this warehouse` 
-        });
-      }
-      if (stock.quantity < item.quantity) {
-        const itemData = itemsData.find(i => i.id === item.itemId);
-        return res.status(400).json({ 
-          message: `Insufficient stock for item ${itemData?.name || item.itemId}. Available: ${stock.quantity}, Requested: ${item.quantity}`
-        });
-      }
-    }
-
-    // Create sale record
-    const sale = await Sales.create({
+    const {
       userId,
-      customerId,
       warehouseId,
+      customerId,
       totalPrice,
+      vat,
       totalTaxedPrice,
       withholdingAmount,
       paidAmount,
       bank,
       salesDate,
+      description,
       tinNo,
       fsNo,
       machineNo,
+      credit,
+      items
+    } = req.body;
+
+    if (!userId || !warehouseId || !tinNo || !fsNo || !machineNo || !items || items.length === 0) {
+      return res.status(400).json({ message: "Missing required fields." });
+    }
+
+    // Validate user + warehouse
+    const [user, warehouse] = await Promise.all([
+      User.findByPk(userId),
+      Warehouse.findByPk(warehouseId)
+    ]);
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!warehouse) return res.status(404).json({ message: "Warehouse not found" });
+
+    // ============================================================
+    //     UPDATE FSMACHINE RECORD (INCREMENT fsNo BY 1)
+    // ============================================================
+    const fsMachine = await FSMachine.findOne({
+      where: { userId },
+      transaction: t,
+      lock: t.LOCK.UPDATE
+    });
+
+    if (!fsMachine) {
+      throw new Error("FS Machine record not found for this user");
+    }
+
+    // Increment fsNo only in FsMachine table
+    let currentFs = fsMachine.fsNo;           
+    let fsLength = currentFs.length;           
+    let nextFs = String(Number(currentFs) + 1).padStart(fsLength, "0");
+
+    await fsMachine.update({ fsNo: nextFs }, { transaction: t });
+    //const itemIds = items.map(i => i.itemId);
+
+    // Find all approved stockout records for THIS warehouse that contain these items
+    // const stockoutItems = await StockoutItem.findAll({
+    //   where: { itemId: itemIds },
+    //   include: [
+    //     {
+    //       model: Stockout,
+    //       where: {
+    //         warehouseId,
+    //         status: "approved"
+    //       }
+    //     }
+    //   ],
+    //   order: [["createdAt", "ASC"]],     
+    //   transaction: t
+    // });
+
+    // GROUP stockouts by itemId so we can deduct FIFO
+    // const groupedStock = {};
+    // for (const s of stockoutItems) {
+    //   if (!groupedStock[s.itemId]) groupedStock[s.itemId] = [];
+    //   groupedStock[s.itemId].push(s);
+    // }
+
+    // for (const saleItem of items) {
+    //   const stockList = groupedStock[saleItem.itemId];
+
+    //   if (!stockList || stockList.length === 0) {
+    //     return res.status(400).json({ message: `Item ${saleItem.itemId} has NO approved stockout in this warehouse.` });
+    //   }
+
+    //   // Calculate total available from all stockouts
+    //   const totalAvailable = stockList.reduce((sum, s) => sum + s.amount, 0);
+
+    //   if (totalAvailable < saleItem.quantity) {
+    //     return res.status(400).json({
+    //       message: `Insufficient stock for item ${saleItem.itemId}. Available: ${totalAvailable}, Required: ${saleItem.quantity}`
+    //     });
+    //   }
+    // }
+
+    // ------------------------------
+    // STEP 2: Create the Sale record
+    // ------------------------------
+    const sale = await Sales.create({
+      userId,
+      customerId,
+      warehouseId,
+      totalPrice,
+      vat,
+      totalTaxedPrice,
+      withholdingAmount,
+      paidAmount,
+      bank,
+      salesDate: salesDate || new Date(),
+      tinNo,
+      fsNo,
+      machineNo,
+      credit,
       description
     }, { transaction: t });
 
-    // Create sales items and update stock
-    const salesItems = await Promise.all(items.map(async (item) => {
-      // Deduct stock
-      const stock = stocks.find(s => s.itemId === item.itemId);
-      stock.quantity -= item.quantity;
-      await stock.save({ transaction: t });
+    // ------------------------------
+    // STEP 3: Deduct stock FIFO + create Sale items
+    // ------------------------------
+    for (const saleItem of items) {
+      let remaining = saleItem.quantity;
+      // const stockList = groupedStock[saleItem.itemId];
 
-      // Calculate total price for the item
-      const itemTotalPrice = item.quantity * item.unitPrice;
+      // for (const stock of stockList) {
+      //   if (remaining <= 0) break;
 
-      // Create sales item with bonus/sponsor info
-      return SalesItem.create({
+      //   const deduction = Math.min(stock.amount, remaining);
+      //   stock.amount -= deduction;
+      //   remaining -= deduction;
+
+      //   await stock.save({ transaction: t });
+      // }
+
+      // Save sales item record
+      await SalesItem.create({
         salesId: sale.id,
-        itemId: item.itemId,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalPrice: itemTotalPrice,
-        bonus: item.bonus || false,
-        bonusAmount: item.bonusAmount || 0,
-        sponsor: item.sponsor || null,
-        sponsorAmount: item.sponsorAmount || 0
+        itemId: saleItem.itemId,
+        quantity: saleItem.quantity,
+        unitPrice: saleItem.unitPrice,
+        totalPrice: saleItem.quantity * saleItem.unitPrice,
+        bonus: saleItem.bonus || 0,
+        sponsor: saleItem.sponsor || 0
       }, { transaction: t });
-    }));
+    }
 
     await t.commit();
 
-    // Fetch the complete sale with items
-    const result = await Sales.findByPk(sale.id, {
+    const fullSale = await Sales.findByPk(sale.id, {
       include: [
         { model: SalesItem, include: [Item] },
-        { model: User, attributes: ['id', 'fullName'] },
-        { model: Customer, attributes: ['id', 'name'] },
-        { model: Warehouse, attributes: ['id', 'name'] }
+        { model: User, attributes: ["id", "fullName"] },
+        { model: Customer, attributes: ["id", "name"] },
+        { model: Warehouse, attributes: ["id", "name"] }
       ]
     });
 
-    res.status(201).json({ 
-      message: "Sale created successfully", 
-      sale: result.toJSON() 
+    res.status(201).json({
+      message: "Sale created successfully",
+      sale: fullSale
     });
 
   } catch (error) {
@@ -208,7 +211,6 @@ exports.getAllSales = async (req, res) => {
   }
 };
 
-
 // Get sale by ID
 exports.getSaleById = async (req, res) => {
   try {
@@ -244,110 +246,117 @@ exports.updateSale = async (req, res) => {
   const t = await Sales.sequelize.transaction();
   try {
     const { id } = req.params;
-    const sale = await Sales.findByPk(id, { 
-      include: [SalesItem],
-      transaction: t 
-    });
+    const sale = await Sales.findByPk(id, { include: [SalesItem], transaction: t });
     if (!sale) {
       await t.rollback();
       return res.status(404).json({ message: "Sale not found" });
     }
 
-    // Get all items to update stock
-    const itemIds = [...new Set([...sale.SalesItems.map(si => si.itemId), 
-      ...(req.body.items || []).map(i => i.itemId)])];
-    
-    const stocks = await Stockout.findAll({
-      where: { 
-        itemId: itemIds,
-        warehouseId: sale.warehouseId 
-      },
-      transaction: t
-    });
+    const oldItems = sale.SalesItems;
+    const newItems = req.body.items || [];
 
-    // Restore original stock
-    for (const salesItem of sale.SalesItems) {
-      const stock = stocks.find(s => s.itemId === salesItem.itemId);
-      if (stock) {
-        stock.quantity += salesItem.quantity;
-        await stock.save({ transaction: t });
-      }
-    }
+    const itemIds = [
+      ...new Set([...oldItems.map(i => i.itemId), ...newItems.map(i => i.itemId)])
+    ];
 
-    // Clean and update sale data
-    const clean = (val) => {
-      if (typeof val !== "string") return val;
-      return val.replace(/^"/g, "").replace(/"$/g, "").trim();
-    };
+    // Load stockout items for these items
+    // const stockoutItems = await StockoutItem.findAll({
+    //   where: { itemId: itemIds },
+    //   transaction: t
+    // });
 
+    // const grouped = {};
+    // for (const s of stockoutItems) {
+    //   if (!grouped[s.itemId]) grouped[s.itemId] = [];
+    //   grouped[s.itemId].push(s);
+    // }
+
+    // ----------------------------
+    // Adjust stock based on diff
+    // ----------------------------
+    // for (const newItem of newItems) {
+    //   const oldItem = oldItems.find(i => i.itemId === newItem.itemId);
+    //   const oldQty = oldItem ? oldItem.quantity : 0;
+    //   const diff = newItem.quantity - oldQty; // positive = deduct, negative = restore
+
+    //   if (!grouped[newItem.itemId] || grouped[newItem.itemId].length === 0) {
+    //     throw new Error(`No stock found for item ${newItem.itemId}`);
+    //   }
+
+    //   let remaining = Math.abs(diff);
+    //   const stockList = grouped[newItem.itemId];
+
+    //   if (diff > 0) {
+    //     // Deduct diff from stock (FIFO)
+    //     for (const stock of stockList) {
+    //       if (remaining <= 0) break;
+    //       const deduct = Math.min(stock.amount, remaining);
+    //       stock.amount -= deduct;
+    //       remaining -= deduct;
+    //       await stock.save({ transaction: t });
+    //     }
+    //     if (remaining > 0) throw new Error(`Insufficient stock for item ${newItem.itemId}`);
+    //   } else if (diff < 0) {
+    //     // Restore diff to stock (add back)
+    //     for (const stock of stockList) {
+    //       if (remaining <= 0) break;
+    //       stock.amount += remaining;
+    //       remaining = 0;
+    //       await stock.save({ transaction: t });
+    //     }
+    //   }
+    // }
+
+    // ----------------------------
     // Update sale record
+    // ----------------------------
+    const vat = parseFloat(req.body.vat);
+
     await sale.update({
-      ...req.body,
-      fsNo: clean(req.body.fsNo) || sale.fsNo,
-      machineNo: clean(req.body.machineNo) || sale.machineNo,
-      tinNo: Number(req.body.tinNo) || sale.tinNo,
-      credit: req.body.credit === true || req.body.credit === "true",
-      totalPrice: req.body.totalPrice || sale.totalPrice,
-      totalTaxedPrice: req.body.totalTaxedPrice || sale.totalTaxedPrice,
-      withholdingAmount: req.body.withholdingAmount || sale.withholdingAmount,
-      paidAmount: req.body.paidAmount !== undefined ? Number(req.body.paidAmount) : sale.paidAmount
+      totalPrice: req.body.totalPrice ?? sale.totalPrice,
+      vat: !isNaN(vat) ? vat : sale.vat,
+      totalTaxedPrice: req.body.totalTaxedPrice ?? sale.totalTaxedPrice,
+      withholdingAmount: req.body.withholdingAmount ?? sale.withholdingAmount,
+      paidAmount: req.body.paidAmount ?? sale.paidAmount,
+      fsNo: req.body.fsNo ?? sale.fsNo,
+      machineNo: req.body.machineNo ?? sale.machineNo,
+      tinNo: req.body.tinNo ?? sale.tinNo,
+      credit: typeof req.body.credit === "boolean" ? req.body.credit : sale.credit,
+      description: req.body.description ?? sale.description
     }, { transaction: t });
 
-    // Delete existing sales items
-    await SalesItem.destroy({
-      where: { salesId: id },
-      transaction: t
-    });
+    // Delete old sales items
+    await SalesItem.destroy({ where: { salesId: sale.id }, transaction: t });
 
-    // Create new sales items if provided
-    if (req.body.items && Array.isArray(req.body.items)) {
-      for (const item of req.body.items) {
-        // Deduct stock
-        const stock = stocks.find(s => s.itemId === item.itemId);
-        if (!stock) {
-          throw new Error(`No stock found for item ${item.itemId}`);
-        }
-        stock.quantity -= item.quantity;
-        if (stock.quantity < 0) {
-          throw new Error(`Insufficient stock for item ${item.itemId}`);
-        }
-        await stock.save({ transaction: t });
-
-        // Create sales item
-        await SalesItem.create({
-          salesId: sale.id,
-          itemId: item.itemId,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalPrice: item.quantity * item.unitPrice,
-          bonus: item.bonus || false,
-          bonusAmount: item.bonusAmount || 0,
-          sponsor: item.sponsor || null,
-          sponsorAmount: item.sponsorAmount || 0
-        }, { transaction: t });
-      }
+    // Create new sales items
+    for (const newItem of newItems) {
+      await SalesItem.create({
+        salesId: sale.id,
+        itemId: newItem.itemId,
+        quantity: newItem.quantity,
+        unitPrice: newItem.unitPrice,
+        totalPrice: newItem.quantity * newItem.unitPrice,
+        bonus: newItem.bonus || 0,
+        sponsor: newItem.sponsor || 0
+      }, { transaction: t });
     }
 
     await t.commit();
+    await sale.reload();
 
-    // Fetch the updated sale with items
     const updatedSale = await Sales.findByPk(id, {
-      include: [
-        { model: SalesItem, include: [Item] },
-        { model: User, attributes: ['id', 'fullName'] },
-        { model: Customer, attributes: ['id', 'name'] },
-        { model: Warehouse, attributes: ['id', 'name'] }
-      ]
+      include: [{ model: SalesItem, include: [Item] }],
     });
 
-    res.json({ message: "Sale updated!", sale: updatedSale });
+    return res.json({ message: "Sale updated successfully", sale: updatedSale });
 
   } catch (err) {
     await t.rollback();
-    console.error("UPDATE ERROR:", err);
+    console.error("UPDATE SALE ERROR:", err);
     res.status(500).json({ message: "Update failed", error: err.message });
   }
 };
+
 
 // Delete sale
 exports.deleteSale = async (req, res) => {
@@ -512,83 +521,60 @@ const { Op } = require("sequelize");
 
 exports.getSalesReportByDateRange = async (req, res) => {
   try {
-    const { startDate, endDate, userId, itemId, warehouseId } = req.body;
+    const { startDate, endDate, userId, itemId, warehouseId, credit } = req.body;
 
-    // --- Filters ---
     const filterByDate = (field) =>
-      startDate && endDate ? { [Op.between]: [new Date(startDate), new Date(endDate)] } : undefined;
+      startDate && endDate
+        ? { [Op.between]: [new Date(startDate), new Date(endDate)] }
+        : undefined;
 
+    // --- Build filters for sales ---
     const salesFilter = {};
     if (filterByDate("salesDate")) salesFilter.salesDate = filterByDate("salesDate");
     if (userId) salesFilter.userId = userId;
     if (warehouseId) salesFilter.warehouseId = warehouseId;
 
-    const movementsFilter = {};
-    if (startDate && endDate) movementsFilter.createdAt = filterByDate("createdAt");
-    if (userId) movementsFilter.userId = userId;
-    if (itemId) movementsFilter.itemId = itemId;
-    if (warehouseId) movementsFilter.warehouseId = warehouseId;
+    // Apply credit filter only if provided
+    let isCreditFilter = false;
+    if (credit === true || credit === "true") {
+      salesFilter.credit = true;
+      isCreditFilter = true;
+    } else if (credit === false || credit === "false") {
+      salesFilter.credit = false;
+    }
 
-    // --- Fetch Data ---
-    const [sales, allStockouts, allLendings, allReturns] = await Promise.all([
-      Sales.findAll({
-        where: salesFilter,
-        attributes: { 
-          exclude: ['itemId', 'bonus', 'bonusAmount', 'sponsor', 'sponsorAmount', 'createdAt', 'updatedAt'] 
-        },
-        include: [
-          { model: User, attributes: ["id", "fullName"] },
-          { model: Customer, attributes: ["id", "name"] },
-          { model: Warehouse, attributes: ["id", "name"] },
-          {
-            model: SalesItem,
-            include: [
-              { 
-                model: Item, 
-                attributes: ["id", "name", "unitPrice"],
-                where: itemId ? { id: itemId } : undefined
-              }
-            ]
-          }
-        ],
-        order: [["salesDate", "ASC"]],
-      }),
-      Stockout.findAll({
-        where: movementsFilter,
-        include: [
-          { model: User, attributes: ["fullName"] },
-          { model: Item, attributes: ["name"] },
-          { model: Warehouse, attributes: ["name"] },
-        ],
-      }),
-      Lending.findAll({
-        where: movementsFilter,
-        include: [
-          { model: User, attributes: ["fullName"] },
-          { model: Item, attributes: ["name"] },
-          { model: Warehouse, attributes: ["name"] },
-        ],
-      }),
-      Return.findAll({
-        where: movementsFilter,
-        include: [
-          { model: User, attributes: ["fullName"] },
-          { model: Item, attributes: ["name"] },
-          { model: Warehouse, attributes: ["name"] },
-        ],
-      }),
-    ]);
+    // --- Fetch sales first ---
+    const sales = await Sales.findAll({
+      where: salesFilter,
+      attributes: {
+        exclude: ['itemId', 'bonus', 'bonusAmount', 'sponsor', 'sponsorAmount', 'createdAt', 'updatedAt']
+      },
+      include: [
+        { model: User, attributes: ["id", "fullName"] },
+        { model: Customer, attributes: ["id", "name"] },
+        { model: Warehouse, attributes: ["id", "name"] },
+        {
+          model: SalesItem,
+          include: [
+            { 
+              model: Item, 
+              attributes: ["id", "name", "unitPrice"],
+              where: itemId ? { id: itemId } : undefined
+            }
+          ]
+        }
+      ],
+      order: [["salesDate", "ASC"]],
+    });
 
     // --- Format sales ---
     const formattedSales = sales.map(sale => {
       const json = sale.toJSON();
-      
-      // Clean up the response
+
       delete json.userId;
       delete json.customerId;
       delete json.warehouseId;
-      
-      // Calculate totals from SalesItems
+
       const totals = sale.SalesItems.reduce((acc, item) => {
         const quantity = parseFloat(item.quantity || 0);
         const totalPrice = parseFloat(item.totalPrice || 0);
@@ -598,10 +584,15 @@ exports.getSalesReportByDateRange = async (req, res) => {
         };
       }, { totalQuantity: 0, totalPrice: 0 });
 
+      const creditAmount = sale.credit
+        ? parseFloat(sale.totalTaxedPrice || 0) - parseFloat(sale.paidAmount || 0)
+        : 0;
+
       return {
         ...json,
         totalQuantity: totals.totalQuantity,
         totalPrice: totals.totalPrice.toFixed(4),
+        creditAmount: creditAmount.toFixed(4),
         SalesItems: sale.SalesItems.map(item => {
           const itemJson = item.toJSON();
           delete itemJson.salesId;
@@ -615,30 +606,91 @@ exports.getSalesReportByDateRange = async (req, res) => {
       };
     });
 
-    // Calculate grand totals
-    const totalSales = formattedSales.reduce((sum, s) => sum + parseFloat(s.totalPrice || 0), 0);
+    // --- Grand totals ---
+    const totalSales = formattedSales.reduce((sum, s) => sum + parseFloat(s.totalTaxedPrice || 0), 0);
     const totalPaid = formattedSales.reduce((sum, s) => sum + parseFloat(s.paidAmount || 0), 0);
     const totalItemsSold = formattedSales.reduce((sum, s) => sum + (s.totalQuantity || 0), 0);
+    const totalCredit = formattedSales.reduce((sum, s) => sum + parseFloat(s.creditAmount || 0), 0);
 
-    // --- Format movements ---
-    const formatMovements = (records, type) => records.map(r => ({
-      type,
-      date: r.createdAt || r.lendingDate || r.returnDate,
-      item: r.Item?.name || null,
-      warehouse: r.Warehouse?.name || null,
-      user: r.User?.fullName || null,
-      quantity: r.quantity || r.amount || r.returnQuantity || 0
-    }));
+    // --- Fetch stock movements only if credit filter is NOT applied ---
+    let stockouts = [], returns = [], lendings = [];
+    if (!isCreditFilter) {
+      const movementsFilter = {};
+      if (filterByDate("createdAt")) movementsFilter.createdAt = filterByDate("createdAt");
+      if (userId) movementsFilter.userId = userId;
+      if (warehouseId) movementsFilter.warehouseId = warehouseId;
 
-    const stockouts = formatMovements(allStockouts, "stockout");
-    const lendings = formatMovements(allLendings, "lending");
-    const returns = formatMovements(allReturns, "return");
+      const [allStockouts, allLendings, allReturns] = await Promise.all([
+        Stockout.findAll({
+          where: movementsFilter,
+          include: [
+            { model: User, attributes: ["fullName"] },
+            { model: Warehouse, attributes: ["name"] },
+            { model: StockoutItem, include: [{ model: Item, attributes: ["name"], where: itemId ? { id: itemId } : undefined }] }
+          ]
+        }),
+        Lending.findAll({
+          where: movementsFilter,
+          include: [
+            { model: User, attributes: ["fullName"] },
+            { model: Item, attributes: ["name"], where: itemId ? { id: itemId } : undefined },
+            { model: Warehouse, attributes: ["name"] }
+          ]
+        }),
+        Return.findAll({
+          where: movementsFilter,
+          include: [
+            { model: User, attributes: ["fullName"] },
+            { model: Warehouse, attributes: ["name"] },
+            { model: ReturnItem, include: [{ model: Item, attributes: ["name"], where: itemId ? { id: itemId } : undefined }] }
+          ]
+        }),
+      ]);
 
-    // --- Totals for movements ---
-    const totalStockout = stockouts.reduce((sum, s) => sum + (s.quantity || 0), 0);
-    const totalLending = lendings.reduce((sum, l) => sum + (l.quantity || 0), 0);
-    const totalReturn = returns.reduce((sum, r) => sum + (r.quantity || 0), 0);
+      const formatStockouts = (records) =>
+        records.flatMap(stockout =>
+          stockout.StockoutItems.map(item => ({
+            type: "stockout",
+            date: stockout.createdAt,
+            item: item.Item?.name || null,
+            warehouse: stockout.Warehouse?.name || null,
+            user: stockout.User?.fullName || null,
+            quantity: item.amount || 0
+          }))
+        );
 
+      const formatReturns = (records) =>
+        records.flatMap(ret =>
+          ret.ReturnItems.map(item => ({
+            type: "return",
+            date: ret.createdAt,
+            item: item.Item?.name || null,
+            warehouse: ret.Warehouse?.name || null,
+            user: ret.User?.fullName || null,
+            quantity: item.quantity || 0
+          }))
+        );
+
+      const formatLendings = (records) =>
+        records.map(l => ({
+          type: "lending",
+          date: l.createdAt,
+          item: l.Item?.name || null,
+          warehouse: l.Warehouse?.name || null,
+          user: l.User?.fullName || null,
+          quantity: l.quantity || 0
+        }));
+
+      stockouts = formatStockouts(allStockouts);
+      returns = formatReturns(allReturns);
+      lendings = formatLendings(allLendings);
+    }
+
+    const totalStockout = stockouts.reduce((sum, s) => sum + s.quantity, 0);
+    const totalReturn = returns.reduce((sum, r) => sum + r.quantity, 0);
+    const totalLending = lendings.reduce((sum, l) => sum + l.quantity, 0);
+
+    // --- Send response ---
     res.status(200).json({
       totalSales: totalSales.toFixed(4),
       totalPaid: totalPaid.toFixed(4),
@@ -647,6 +699,7 @@ exports.getSalesReportByDateRange = async (req, res) => {
       totalStockout,
       totalLending,
       totalReturn,
+      totalCredit: totalCredit.toFixed(4),
       sales: formattedSales,
       stockouts,
       lendings,
@@ -655,9 +708,9 @@ exports.getSalesReportByDateRange = async (req, res) => {
 
   } catch (error) {
     console.error("Error generating sales report:", error);
-    res.status(500).json({ 
-      message: "Failed to generate sales report", 
-      error: error.message 
+    res.status(500).json({
+      message: "Failed to generate sales report",
+      error: error.message
     });
   }
 };

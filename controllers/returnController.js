@@ -6,15 +6,13 @@ const Warehouse = require("../models/wharehouse");
 const Store = require("../models/store");
 const { Op } = require("sequelize");
 
-//
-// CREATE RETURN (MULTIPLE ITEMS)
-//
+
 exports.createReturn = async (req, res) => {
   try {
-    const { userId, warehouseId, reason, description, type, returnDate, items } = req.body;
+    const { userId, warehouseId, reason, description, type, returnDate, items, returnTo } = req.body;
 
     if (!userId || !warehouseId || !items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: "userId, warehouseId and items[] are required" });
+      return res.status(400).json({ message: "userId, warehouseId, returnTo and items[] are required" });
     }
 
     // Validate user and warehouse
@@ -43,6 +41,7 @@ exports.createReturn = async (req, res) => {
       description,
       type,
       status: "pending",
+      returnTo,
       returnDate
     });
 
@@ -62,9 +61,6 @@ exports.createReturn = async (req, res) => {
   }
 };
 
-//
-// GET ALL RETURNS
-//
 exports.getReturns = async (req, res) => {
   try {
     const where = {};
@@ -95,9 +91,6 @@ exports.getReturns = async (req, res) => {
   }
 };
 
-//
-// GET RETURN BY ID
-//
 exports.getReturnById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -149,13 +142,10 @@ exports.getReturnsByUserId = async (req, res) => {
   }
 };
 
-
-//
-// UPDATE RETURN (STORE UPDATE FOR MULTIPLE ITEMS)
-//
 exports.updateReturn = async (req, res) => {
   try {
     const { id } = req.params;
+    const { status, items } = req.body;
 
     const returnRecord = await Return.findByPk(id, {
       include: [ReturnItem]
@@ -166,42 +156,77 @@ exports.updateReturn = async (req, res) => {
 
     const oldStatus = returnRecord.status;
 
-    // Update return
-    await returnRecord.update(req.body);
+    // ❗ Only pending returns can be updated
+    if (oldStatus !== "pending") {
+      return res.status(400).json({
+        message: "Only pending returns can be updated"
+      });
+    }
 
-    // If approved, increase store quantities for ALL items
-    if (req.body.status === "approved" && oldStatus !== "approved") {
-      for (const rItem of returnRecord.ReturnItems) {
-        const store = await Store.findOne({
-          where: {
-            itemId: rItem.itemId,
-            warehouseId: returnRecord.warehouseId
-          }
+    // -----------------------------------------------------
+    // ① Update ReturnItem quantities (if items passed)
+    // -----------------------------------------------------
+    if (items && Array.isArray(items)) {
+      for (const item of items) {
+        const rItem = await ReturnItem.findOne({
+          where: { ReturnId: id, itemId: item.itemId }
         });
 
-        if (store) {
-          store.quantity += rItem.quantity;
-          await store.save();
-        } else {
-          await Store.create({
-            itemId: rItem.itemId,
-            warehouseId: returnRecord.warehouseId,
-            quantity: rItem.quantity
-          });
+        if (rItem) {
+          rItem.quantity = item.quantity;
+          await rItem.save();
         }
       }
     }
 
-    res.status(200).json({ message: "Return updated successfully", data: returnRecord });
+    // -----------------------------------------------------
+    // ② Update Return record fields (including returnTo)
+    // -----------------------------------------------------
+    await returnRecord.update(req.body);
+
+    // Reload to get updated ReturnItems for accurate response
+    await returnRecord.reload({ include: [ReturnItem] });
+
+    // -----------------------------------------------------
+    // ③ If status approved, update store quantity ONLY IF returnTo = 'store'
+    // -----------------------------------------------------
+    if (status === "approved" && oldStatus !== "approved") {
+
+      if (returnRecord.returnTo === "store") {
+
+        for (const rItem of returnRecord.ReturnItems) {
+          const store = await Store.findOne({
+            where: {
+              itemId: rItem.itemId,
+              warehouseId: returnRecord.warehouseId
+            }
+          });
+
+          if (store) {
+            store.quantity += rItem.quantity;
+            await store.save();
+          } else {
+            await Store.create({
+              itemId: rItem.itemId,
+              warehouseId: returnRecord.warehouseId,
+              quantity: rItem.quantity
+            });
+          }
+        }
+      }
+    }
+
+    res.status(200).json({
+      message: "Return updated successfully",
+      data: returnRecord
+    });
+
   } catch (error) {
     console.error("Error updating return:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
-//
-// DELETE RETURN
-//
 exports.deleteReturn = async (req, res) => {
   try {
     const { id } = req.params;
@@ -217,18 +242,15 @@ exports.deleteReturn = async (req, res) => {
   }
 };
 
-
-//
-// RETURN REPORT (MULTIPLE ITEMS)
-//
 exports.getReturnReport = async (req, res) => {
   try {
-    const { startDate, endDate, userId, warehouseId, type, status } = req.body;
+    const { startDate, endDate, userId, warehouseId, type, returnTo, status } = req.body;
 
     const where = {};
     if (userId) where.userId = userId;
     if (warehouseId) where.warehouseId = warehouseId;
     if (type) where.type = type;
+    if (returnTo) where.returnTo = returnTo;
     if (status) where.status = status;
 
     if (startDate) where.returnDate = { [Op.gte]: new Date(startDate) };

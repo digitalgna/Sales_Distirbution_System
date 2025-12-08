@@ -1,11 +1,21 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/db.js");
+const User = require("../models/user.js");
 
 const Zbalance = sequelize.define("Zbalance", {
   id: {
     type: DataTypes.INTEGER,
     autoIncrement: true,
     primaryKey: true,
+  },
+  userId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+        model : User,
+        key: 'id'
+    },
+    onDelete: 'CASCADE'
   },
   date: {
     type: DataTypes.DATEONLY,

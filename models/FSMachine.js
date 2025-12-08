@@ -18,7 +18,7 @@ const FsTable = sequelize.define("FsTable", {
     onDelete: 'CASCADE'
   },
   machineNo:{
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING,
     allowNull: false
   },
   fsNo:{

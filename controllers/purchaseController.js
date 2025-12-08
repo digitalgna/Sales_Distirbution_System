@@ -479,9 +479,9 @@ exports.getPurchaseReport = async (req, res) => {
       warehouse: p.Warehouse?.name,
       purchaseDate: p.purchaseDate,
       status: p.status,
-      subTotal: Number(p.subTotal),
+      totalVatedAfterDiscount: Number(p.totalVatedAfterDiscount),
       vat: Number(p.vat),
-      totalWithVat: Number(p.totalWithVat),
+      withholdingAmount: Number(p.withholdingAmount),
       items: p.PurchaseItems.map((pi) => ({
         itemId: pi.itemId,
         name: pi.Item?.name,
@@ -490,7 +490,7 @@ exports.getPurchaseReport = async (req, res) => {
         quantity: pi.quantity,
         bonus: pi.bonus || 0,
         sponsor: pi.sponsor || null,
-        totalPrice: Number(pi.unitPrice) * pi.quantity,
+        // totalPrice: Number(pi.unitPrice) * pi.quantity,
       })),
     }));
 
@@ -500,14 +500,14 @@ exports.getPurchaseReport = async (req, res) => {
       (acc, p) => acc + p.PurchaseItems.reduce((sum, pi) => sum + pi.quantity, 0),
       0
     );
-    const totalPrice = purchases.reduce(
-      (acc, p) => acc + Number(p.totalWithVat),
-      0
-    );
+    // const totalPrice = purchases.reduce(
+    //   (acc, p) => acc + Number(p.totalWithVat),
+    //   0
+    // );
 
     res.json({
       report,
-      summary: { purchaseCount, totalQuantity, totalPrice },
+      summary: { purchaseCount, totalQuantity },
     });
   } catch (error) {
     console.error(error);

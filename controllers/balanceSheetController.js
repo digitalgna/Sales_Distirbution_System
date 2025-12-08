@@ -168,26 +168,7 @@ exports.updateBalanceSheet = async (req, res) => {
       minusedReason,
     } = req.body;
 
-    // Recalculate rawEndingBalance if any numeric column changed
-    const prevEndingBalanceRecord = await BalanceSheet.findOne({
-      where: {
-        customerId: customerId || record.customerId,
-        date: { [Op.lt]: date || record.date },
-      },
-      order: [["date", "DESC"], ["id", "DESC"]],
-    });
-    const previousEndingBalance = prevEndingBalanceRecord
-      ? parseFloat(prevEndingBalanceRecord.endingBalance)
-      : 0;
-
-    const newRawEndingBalance =
-      previousEndingBalance +
-      (bankDeposit ?? record.bankDeposit) +
-      (withHold ?? record.withHold) -
-      (invoiceAmount ?? record.invoiceAmount) +
-      (adjustment ?? record.adjustment) -
-      (minusedFromDept ?? record.minusedFromDept);
-
+    // Update current record
     await record.update({
       agentName: agentName ?? record.agentName,
       customerId: customerId ?? record.customerId,
@@ -199,14 +180,32 @@ exports.updateBalanceSheet = async (req, res) => {
       adjustment: adjustment ?? record.adjustment,
       minusedFromDept: minusedFromDept ?? record.minusedFromDept,
       minusedReason: minusedReason ?? record.minusedReason,
-      endingBalance: newRawEndingBalance,
     });
+
+    // Recalculate ending balances for this and all subsequent records
+    const allRecords = await BalanceSheet.findAll({
+      where: { customerId: record.customerId },
+      order: [["date", "ASC"], ["id", "ASC"]],
+    });
+
+    let cumulativeBalance = 0;
+    for (const r of allRecords) {
+      cumulativeBalance +=
+        parseFloat(r.bankDeposit) +
+        parseFloat(r.withHold) -
+        parseFloat(r.invoiceAmount) +
+        parseFloat(r.adjustment) -
+        parseFloat(r.minusedFromDept);
+
+      await r.update({ endingBalance: cumulativeBalance });
+    }
 
     res.status(200).json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+
 
 // ===================== DELETE =====================
 exports.deleteBalanceSheet = async (req, res) => {

@@ -123,7 +123,6 @@ exports.createStockout = async (req, res) => {
 };
 
 // Get all stockouts
-// Get all stockouts
 exports.getAllStockouts = async (req, res) => {
   try {
     const stockouts = await Stockout.findAll({
@@ -230,7 +229,6 @@ exports.getStockoutById = async (req, res) => {
     });
   }
 };
-
 
 exports.getStockoutsByUserId = async (req, res) => {
   const { userId } = req.params;

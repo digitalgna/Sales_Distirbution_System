@@ -49,7 +49,7 @@ router.use("/sales", salesRoutes);
 router.use("/lending", lendingRoutes);
 router.use("/report", reportRoutes);
 router.use("/dashboard", dashboardRoutes);
-router.use("/fs-table", fsRoutes);
+router.use("/machinfs", fsRoutes);
 router.use("/balance-sheet", balanceSheetRoutes);
 router.use("/zbalance", zbalanceRoutes);
 

@@ -22,13 +22,15 @@ const SalesItem = require("./salesItem.js");
 const PurchaseItem = require("./purchaseItem.js");
 const StockoutItem = require("./stockoutItem.js");
 const ReturnItem = require("./returnItem.js");
+const Zbalance = require("../models/zbalance.js")
 
 // Define associations
+User.hasMany(Zbalance, { foreignKey: 'userId',  onDelete: 'CASCADE' });
+Zbalance.belongsTo(User, { foreignKey: 'userId' });
 
 //permission and role 
 Role.hasMany(Permission, {foreignKey: "roleId"});
 Permission.belongsTo(Role, { foreignKey: "roleId" });
-
 
   //role and user
 Role.hasMany(User, {foreignKey: "roleId", onDelete: "SET NULL", onUpdate: "CASCADE",});

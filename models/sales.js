@@ -30,15 +30,19 @@ const Sales = sequelize.define("Sales", {
     onDelete: 'CASCADE'
   },
   totalPrice: {
-    type:DataTypes.DECIMAL(10, 4),
+    type:DataTypes.DECIMAL(12, 4),
+    allowNull:false
+  },
+  vat: {
+    type: DataTypes.DECIMAL(12, 4),
     allowNull:false
   },
   totalTaxedPrice: {
-    type: DataTypes.DECIMAL(10,4)
+    type: DataTypes.DECIMAL(12,4)
   },
-  withholdingAmount: { type: DataTypes.DECIMAL(12,2), defaultValue: 0, allowNull: false },
+  withholdingAmount: { type: DataTypes.DECIMAL(12,4), defaultValue: 0, allowNull: false },
   paidAmount: {
-    type: DataTypes.DECIMAL(10, 4),
+    type: DataTypes.DECIMAL(12, 4),
     allowNull: false
   },
   bank: {

@@ -33,6 +33,10 @@ const Return = sequelize.define("Return", {
     allowNull: false,
     defaultValue: 'pending'
   },
+  returnTo: {
+    type: DataTypes.ENUM('car', 'store'),
+    allowNull: false,
+  },
   description: {
     type: DataTypes.STRING,
     allowNull: true
